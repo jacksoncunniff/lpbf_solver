@@ -33,18 +33,7 @@ z_coords = z_min + (np.arange(Nz) + 0.5) * dz
 T0 = 300 # Kelvin
 Tb = T0 # Base plate temperature
 
-#. Laser variables
-P = 1  # power
-A = 1  # 
-C = 1  # powder Cp
-a = 1  # half of laser diam in Y 
-b = 1  # half of laser diam in X
-c = 1  # laser penetration depth
-α = 1  # thermal diffisuvity of powder bed
-C = 1  # heat capacity powder?
-V = 1  # speed of the heat source [m/s]
-t_prime = 1  # some kind of time ?
-delta_time = 0.0025 # time increment
+
 
 
 # Pre-allocate solution arrays
@@ -91,40 +80,7 @@ xz = allocate_fields(Nx, Nz)
 yz = allocate_fields(Ny, Nz) 
 
 
-def temperature_update(x, y, z, current_time, dt):
-    """
-    Source temperature method for calculating the increment in temperature according to eq (2)
 
-    This will return a Nx by Nz array of temperature increment depending on the current time 
-    of the simulation
-
-    The temperature source equation does not explicitly take a parameter for laser center, instead 
-    it calculated the position as distance traveled from x with the V*t_prime term in X2
-
-    current_time is assumed to be the time elapsed in the laser heating, which will be the total time 
-    elapsed in the whole simulation in this case
-    
-    """
-
-    X1 = (3*np.sqrt(3)*P*A)/(rho*C*np.pi*np.sqrt(np.pi))
-    X2 = np.exp(-3*((x-V*current_time)**2/(12*α*dt+a**2) + y**2/(12*α*dt+b**2) + z**2/(12*α*dt+c**2))) 
-    X3 = np.sqrt(12*α*dt + a**2) * np.sqrt(12*α*dt + b**2) * np.sqrt(12*α*dt + c**2)
-
-    return X1*X2/X3*dt
-
-def heating_module(T_fields, current_time):
-    """
-    This method is intended to update the provided temperature fields
-    from either the X-Z or Y-Z dict using the temperature_source method.
-
-    """
-
-    dT_fields = temperature_update(x=x_coords, 
-                                   y=0, 
-                                   z=z_coords, 
-                                   current_time=current_time, 
-                                   dt=delta_time)
-    T_fields += dT_fields
 
 def calculate_pressure_gradients(fields):
     uq = fields["uq"]
@@ -505,55 +461,6 @@ def assemble_w_mom(fields: dict, dpdz):
 
 ## Solver variables
 
-depth_convergence = 0.0001 # [m]
-depth_change = 1
-t = 0 # initial time [s]
-m = 0 # initial iteration count
-dt = 0.001 # [s]
-
-## timesteps for X-Z plane
-while depth_change > depth_convergence:
-    t = (m+1)*dt
-
-    # temperature module
-    update_material_properties(xz)  ## TODO
-
-    heating_module(xz["T"], t)
-
-    update_material_properties(xz)
-
-    simple_loop(1000)
-
-    energy_conservation(xz)  ## TODO
-    depth_change = compute_melt_pool_depth(xz)  ## TODO
-
-## simple loop?
-def simple_loop(max_iters):
-    for iteration in range(max_iters):
-
-        xz["dpdx"], xz["dpdz"] = calculate_pressure_gradients(xz["p"])
-
-        # X-momentum RHS uses dpdx
-        A_u, b_u = assemble_u_mom(xz, xz["dpdx"])
-        xz = solve_u_star(A_u, b_u)
-
-        # Z-momentum RHS uses dpdz
-        A_w, b_w = assemble_w_mom(xz, xz["dpdz"])
-        xz = solve_w_star(A_w, b_w)
-
-        # Rhie-Chow, and pressure correction...
-        xz["flux_q"], xz["flux_z"] = face_fluxes(xz)
-        
-
-        # guess pressure field p_star
-        # solve momentum equations to find 
-            # u_star
-            # w_star
-        # solve p' equation
-        # calculate p from p' + p_star
-        # calculate u, w from correction formulas
-        # solve for other transport properties
-        # use new pressure as next pressure guess p_star
 
 
 def update_material_properties(fields):
