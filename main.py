@@ -9,7 +9,7 @@ from core.mesh import Mesh
 from core.fields import FlowField, FaceField
 from core.material import Material
 from core.boundary_conditions import BoundaryConditions
-from core.settings import SolverSettings
+from core.settings import SolveSettings, PlotSettings
 
 from discretization.momentum import u_link_coefficients, w_link_coefficients
 from discretization.pressure import pressure_correction
@@ -32,6 +32,12 @@ def main():
     parser.add_argument("--steps", type=int, default=1000)
 
     args = parser.parse_args()
+
+    solverSettings = SolveSettings()
+    plotSettings = PlotSettings()
+
+
+    # take args and throw them into the solver settings, mesh, etc.
 
 
 if __name__ == "__main__":

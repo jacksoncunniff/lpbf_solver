@@ -1,6 +1,32 @@
 import numpy as np
 from dataclasses import dataclass, field
 
+from core.mesh import Mesh
+from core.fields import FlowField, FaceField
+from core.boundary_conditions import BoundaryConditions
+
+from discretization.momentum import u_link_coefficients, w_link_coefficients
+from discretization.pressure import pressure_correction
+from discretization.interpolation import face_fluxes
+
+from core.settings import SolveSettings
+
+
+
+class SIMPLEcfd:
+    """
+    Take settings from main execution -> set up domain, mesh, etc.
+
+    run loops until convergence
+    follow method on paper
+
+    """
+
+    def __init__(self, 
+                 settings: SolveSettings, 
+                 
+                 ):
+        
 
 
 

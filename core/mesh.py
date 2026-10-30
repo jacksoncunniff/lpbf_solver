@@ -14,6 +14,7 @@ class Mesh:
     Nz: int
 
     # cell spacing
+    dt: float
     dx: float = field(init=False)
     dy: float = field(init=False)
     dz: float = field(init=False)
