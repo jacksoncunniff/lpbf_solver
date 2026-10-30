@@ -21,6 +21,9 @@ class FlowField:
     T: np.ndarray
     mu: np.ndarray
     rho: np.ndarray
+    liquid_frac: np.ndarray
+    dgamma_dT: np.ndarray       # this will be a 1 x Nx array that contains the updated surface tension value 
+                                # from the Materials class curve, for top row of cells only. calculated from dT of those cells
 
     uq_old: np.ndarray
     w_old: np.ndarray
@@ -34,6 +37,7 @@ class FlowField:
 
     dudx: np.ndarray
     dwdx: np.ndarray
+    
 
     dTdx: np.ndarray
     dTdz: np.ndarray
@@ -55,6 +59,7 @@ class FlowField:
         dpdx[:, 1:-1] = (uq[:, 2:] - uq[:, :-2]) / (2 * dx)
         dpdz[1:-1, :] = (w[2:, :] - w[:-2, :]) / (2 * dz)
 
+        # TODO - check if order needs to be raised on these
         # Left and right boundary-adjacent cells
         dpdx[:, 0] = (uq[:, 1] - uq[:, 0]) / dx
         dpdx[:, -1] = (uq[:, -1] - uq[:, -2]) / dx
@@ -93,7 +98,36 @@ class FlowField:
         self.dTdx = dTdx
         self.dTdz = dTdz
 
+    def calculate_liquid_frac(self):
 
+        Ts = 900    # TODO - UPDATE PROPERTIES & OR REFERENCE MATERIALS SPECIFICALLY IN SEP CLASS
+        Tl = 1500
+
+        mask = self.T > Ts & self.T < Tl
+        self.liquid_frac[self.T <= Ts] = 0
+        self.liquid_frac[self.T >= Tl] = 1
+
+        self.liquid_frac[mask] = (self.T[mask] - Ts) / (Tl - Ts)
+
+    def _update_dwdx(self):
+
+        ## Interior Cells -> Central Difference
+        self.dwdx[:, 1:-1] = (self.w[:,:-2] - self.w[:,2:]) / (2*self.mesh.dx)
+    
+        ## Left / Right Edge -> 1-sided 2nd order approximation
+        self.dwdx[:, 0] = (-3 * self.w[:, 0] + 4 * self.w[:, 1] - self.w[:, 2]) / (2 * self.mesh.dx)
+        self.dwdx[:, -1] = (-3 * self.w[:, -1] + 4 * self.w[:, -2] - self.w[:, -3]) / (2 * self.mesh.dx)
+        pass
+
+    def _update_dudx(self):
+
+        ## Interior Cells -> Central Difference
+        self.dudx[:, 1:-1] = (self.uq[:,:-2] - self.uq[:,2:]) / (2*self.mesh.dx)
+    
+        ## Left / Right Edge -> 1-sided 2nd order approximation
+        self.dudx[:, 0] = (-3 * self.uq[:, 0] + 4 * self.uq[:, 1] - self.uq[:, 2]) / (2 * self.mesh.dx)
+        self.dudx[:, -1] = (-3 * self.uq[:, -1] + 4 * self.uq[:, -2] - self.uq[:, -3]) / (2 * self.mesh.dx)
+        pass
 
 
 @dataclass

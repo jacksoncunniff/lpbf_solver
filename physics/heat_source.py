@@ -53,7 +53,7 @@ class LaserSource:
         b = self.b
         c = self.c
 
-        X1 = (3*np.sqrt(3)*P*A)/(rho * C*np.pi*np.sqrt(np.pi))
+        X1 = (3*np.sqrt(3.0)*P*A)/(rho * C*np.pi*np.sqrt(np.pi))
         X2 = np.exp(-3*((x-V*current_time)**2/(12*α*dt+a**2) + y**2/(12*α*dt+b**2) + z**2/(12*α*dt+c**2))) 
         X3 = np.sqrt(12*α*dt + a**2) * np.sqrt(12*α*dt + b**2) * np.sqrt(12*α*dt + c**2)
 

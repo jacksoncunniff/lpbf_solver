@@ -11,7 +11,7 @@ from core.material import Material
 from core.boundary_conditions import BoundaryConditions
 from core.settings import SolveSettings, PlotSettings
 
-from discretization.momentum import u_link_coefficients, w_link_coefficients
+from discretization.momentum import MomentumAssembler
 from discretization.pressure import pressure_correction
 from discretization.interpolation import face_fluxes
 
