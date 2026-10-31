@@ -32,10 +32,14 @@ class MomentumAssembler:
         Construct and return A_u and b_u to solve u_mom iteratively elsewhere.
         
         """
+        self.Au = np.empty((self.mesh.Nz, self.mesh.Nx))
+        self.bu = np.empty(self.mesh.Nx * self.mesh.Nz)
+
         Nz = self.mesh.Nz
         Nx = self.mesh.Nx
         V = self.mesh.dx * self.mesh.dz
         e_vector = fields.liquid_frac.flatten()
+        
         # INTERIOR CELLS ONLY
         for j in range(1, Nz-1):
             for i in range(1, Nx-1):
@@ -83,15 +87,9 @@ class MomentumAssembler:
             mu_t = 0.5 * (fields.mu[j-1, i] + fields.mu[j, i])
 
             # utilizes old w velocity values (previous iteration)
-            w_e = fields.w[j, i+1]
-            w_w = fields.w[j, i-1]
-            w_ne = fields.w[j-1, i+1]
-            w_nw = fields.w[j-1, i-1]
-            w_se = 0
-            w_sw = 0
 
-            dwdx_b = (1/(4*self.mesh.dx)) * (w_e - w_w + w_se - w_sw)
-            dwdx_t = (1/(4*self.mesh.dx)) * (w_e - w_w + w_ne - w_nw)
+            dwdx_b = 0
+            dwdx_t = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j-1, i])
 
             diffusion_stresses = mu_b * dwdx_b - mu_t * dwdx_t
             # momentum_source =                       #TODO
@@ -248,8 +246,8 @@ class MomentumAssembler:
         mu_t = 0.5 * (fields.mu[j-1, i] + fields.mu[j, i])
         # mu_t = 0
 
-        # dwdx_b = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j-1, i]) 
-        dwdx_t = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j+1, i]) 
+        # dwdx_b = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j+1, i]) 
+        dwdx_t = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j-1, i]) 
         dwdx_b = 0      # boundary condition
 
         diffusion_stresses = mu_b * dwdx_b - mu_t * dwdx_t
@@ -273,8 +271,8 @@ class MomentumAssembler:
         mu_t = 0.5 * (fields.mu[j-1, i] + fields.mu[j, i])
 
 
-        # dwdx_b = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j-1, i]) 
-        dwdx_t = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j+1, i]) 
+        # dwdx_b = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j+1, i]) 
+        dwdx_t = 0.5 * (fields.dwdx[j, i] + fields.dwdx[j-1, i]) 
         dwdx_b = 0
 
         diffusion_stresses = mu_b * dwdx_b - mu_t * dwdx_t
@@ -289,6 +287,7 @@ class MomentumAssembler:
         ## Surface Tension Contribution
         self.bu += self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
 
+        return self.Au, self.bu, self.Au.diagonal()
 
 
     def assemble_w(self, fields, faces, dt):
@@ -358,7 +357,7 @@ class MomentumAssembler:
     
             # Diffusion conductance
             De = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i+1])
-            Dw = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i-1]) / 2
+            Dw = -2 * dz * (1/dx) * 1.0 * (mu[j, i] + 0)          / 2
             Ds = -dx * (1/dz) * 0.5 * (mu[j-1] + mu[j, i])
             Dn = -dx * (1/(dz)) * 0.5 * (mu[j, i])
     
@@ -379,7 +378,7 @@ class MomentumAssembler:
             Fn: float = float(flux_w[j-1, i]) 
     
             # Diffusion conductance
-            De = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i+1]) / 2
+            De = -2 * dz * (1/dx) * 1.0 * (mu[j, i]) / 2
             Dw = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i-1])
             Ds = -dx * (1/dz) * 0.5 * (mu[j-1] + mu[j, i])
             Dn = -dx * (1/(dz)) * 0.5 * (mu[j, i])
@@ -405,7 +404,7 @@ class MomentumAssembler:
             De = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i+1])
             Dw = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i-1])
             Ds = -dx * (1/dz) * 0.5 * (mu[j-1] + mu[j, i])
-            Dn = -dx * (1/(2*dz)) * 0.5 * (mu[j, i])
+            Dn = -dx * (1/(2*dz)) * 1.0 * (mu[j, i])
     
             # link coefficients that are utilized with face velocities
             aE: float = float(De + max(-Fe, 0))
@@ -422,12 +421,12 @@ class MomentumAssembler:
             Fe: float = float(flux_q[j, i+1])
             Fw: float = float(flux_q[j, i-1])
             Fs: float = 0
-            Fn: float = float(flux_w[j+1, i]) 
+            Fn: float = float(flux_w[j-1, i]) 
     
             # Diffusion conductance
             De = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i+1])
             Dw = -2 * dz * (1/dx) * 0.5 * (mu[j, i] + mu[j, i-1])
-            Ds = -dx * (1/dz) * 0.5 * (mu[j-1] + mu[j, i]) / 2
+            Ds = -dx * (1/dz) * 1.0 * (mu[j, i] + 0) / 2
             Dn = -dx * (1/(2*dz)) * 0.5 * (mu[j, i])
     
             # link coefficients that are utilized with face velocities
@@ -459,9 +458,9 @@ class MomentumAssembler:
     
             # Diffusion conductance
             De = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + mu[j, i+1])
-            Dw = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + 0)                  / 2
+            Dw = -2 * dz * (1/dx) * 1.0 *   (mu[j, i] + 0)                  / 2
             Ds = -dx * (1/dz) * 0.5 *       (mu[j,i] + mu[j-1, i])
-            Dn = -dx * (1/(dz)) * 0.5 *     (mu[j, i] + 0)                  / 2
+            Dn = -dx * (1/(dz)) * 1.0 *     (mu[j, i] + 0)                  / 2
     
             # link coefficients that are utilized with face velocities
             aE: float = float(De + max(-Fe, 0))
@@ -480,10 +479,10 @@ class MomentumAssembler:
             Fn: float = 0 
     
             # Diffusion conductance
-            De = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + 0)                / 2
+            De = -2 * dz * (1/dx) * 1.0 *   (mu[j, i] + 0)                / 2
             Dw = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + mu[j, i-1])                
             Ds = -dx * (1/dz) * 0.5 *       (mu[j, i] + mu[j+1, i])
-            Dn = -dx * (1/(dz)) * 0.5 *     (mu[j, i] + 0)                / 2
+            Dn = -dx * (1/(dz)) * 1.0 *     (mu[j, i] + 0)                / 2
     
             # link coefficients that are utilized with face velocities
             aE: float = float(De + max(-Fe, 0))
@@ -509,8 +508,8 @@ class MomentumAssembler:
 
             # Diffusion conductance
             De = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + mu[j, i+1])                
-            Dw = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + 0)              / 2        
-            Ds = -dx * (1/dz) * 0.5 *       (mu[j, i] + 0)              / 2
+            Dw = -2 * dz * (1/dx) * 1.0 *   (mu[j, i] + 0)              / 2        
+            Ds = -dx * (1/dz) * 1.0 *       (mu[j, i] + 0)              / 2
             Dn = -dx * (1/(dz)) * 0.5 *     (mu[j, i] + mu[j+1, i])                  
     
             # link coefficients that are utilized with face velocities
@@ -531,9 +530,9 @@ class MomentumAssembler:
             Fn: float = float(flux_w[j-1, i]) 
 
             # Diffusion conductance
-            De = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + 0)                / 2  
+            De = -2 * dz * (1/dx) * 1.0 *   (mu[j, i] + 0)                / 2  
             Dw = -2 * dz * (1/dx) * 0.5 *   (mu[j, i] + mu[j, i-1])             
-            Ds = -dx * (1/dz) * 0.5 *       (mu[j, i] + 0)                  / 2
+            Ds = -dx * (1/dz) * 1.0 *       (mu[j, i] + 0)                  / 2
             Dn = -dx * (1/(dz)) * 0.5 *     (mu[j, i] + mu[j-1, i])                  
     
             # link coefficients that are utilized with face velocities
@@ -564,4 +563,4 @@ class MomentumAssembler:
 
         dTdx_topRow = dTdx_all[0, :]
 
-        return dgamma_dT * dTdx_topRow
+        return dgamma_dT * dTdx_topRow * self.mesh.dx
