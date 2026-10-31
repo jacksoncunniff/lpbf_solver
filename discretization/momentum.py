@@ -281,7 +281,7 @@ class MomentumAssembler:
 
         # Reset coeff matrix that is being returned
         self.Aw = np.empty((self.N, self.N))
-        self.bw = np.empty(self.N)
+        self.bw = np.empty((self.mesh.Nz, self.mesh.Nx))
 
         # Intermediate link coeff matrices that will each be determined individually
         shape = (self.mesh.Nz, self.mesh.Ny)
@@ -300,10 +300,10 @@ class MomentumAssembler:
         Fn = faces.flux_w[:-1, :]
 
         # Diffusion matrices
-        De = np.empty(shape)
-        Dw = np.empty(shape)
-        Ds = np.empty(shape)
-        Dn = np.empty(shape)
+        De = np.zeros(shape)
+        Dw = np.zeros(shape)
+        Ds = np.zeros(shape)
+        Dn = np.zeros(shape)
 
         #interpolate interior mu face values for diffusion coeff.
         mu_q = 0.5 * (fields.mu[:, :-1] + fields.mu[:, 1:])
@@ -344,13 +344,51 @@ class MomentumAssembler:
         aP = aP.ravel()
 
         # RHS
-
+        V = self.mesh.dx * self.mesh.dz * 1
+        
         # transient contribution from a0 * w at time step
+        self.bw += a0 * fields.w_old - V * fields.dpdz
+
         # transposed momentum from u velocity
+        dudz_x = 0.5 * (fields.dudz[:, :-1] + fields.dudz[:, 1:])
+        tau_cross = dudz_x * mu_q
+        diffusion_stress = np.zeros_like(self.bw)
+        diffusion_stress[:, 1:] -= tau_cross * self.mesh.dz # west contribuion
+        diffusion_stress[:, :-1] += tau_cross * self.mesh.dz # east contribution
+
         # source momentum from mushy zone
-        # source surface tension from marangoni effect
+        source_momentum_sink = np.zeros_like(self.bw)
+        source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w)
 
+        # # source surface tension from marangoni effect
+        # surface_tension = np.zeros_like(self.bw)
+        # surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
 
+        self.bw += diffusion_stress + source_momentum_sink
+        self.bw = self.bw.ravel()
+
+        aP = aP.ravel()
+        aE = aE.ravel()
+        aW = aW.ravel()
+        aS = aS.ravel()
+        aN = aN.ravel()
+
+        Nx = self.mesh.Nx
+        Nz = self.mesh.Nz
+
+        k = np.arange(Nx * Nz)
+
+        # Arrays of indices that have the named neighbors
+        east  = k[k % Nx != Nx - 1]     # list of cells (k index) that have an east neighbor
+        west  = k[k % Nx != 0]
+        north = k[k >= Nx]
+        south = k[k < Nx * Nz - Nx]
+
+        self.Aw[k, k]               = aP
+        self.Aw[east, east+1]       = -aE
+        self.Aw[west, west-1]       = -aW
+        self.Aw[north, north-Nx]    = -aN
+        self.Aw[south, south-Nx]    = -aS
 
         return self.Aw, self.bw, aP
 
@@ -629,7 +667,7 @@ class MomentumAssembler:
         # source momentum sink from the mushy zone
         # utilizes full vector operation
 
-        G = 1       # permeability
+        G = 1       # permeability  TODO: UPDATE
         d = 0.1     # computational constant to avoid div by 0
 
         return -G * (1-e_vector)**2 / (e_vector**3 + d) * u_vector

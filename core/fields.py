@@ -43,6 +43,7 @@ class FlowField:
 
     dudx: np.ndarray =  field(init=False)
     dwdx: np.ndarray =  field(init=False)
+    dudz: np.ndarray = field(init=False)
 
     dTdx: np.ndarray =  field(init=False)
     dTdz: np.ndarray =  field(init=False)
@@ -74,6 +75,7 @@ class FlowField:
         self.dpdz: np.ndarray = np.empty(self.two_dim)
         self.dudx: np.ndarray = np.empty(self.two_dim)
         self.dwdx: np.ndarray = np.empty(self.two_dim)
+        self.dudz: np.ndarray = np.empty(self.two_dim)
         self.dTdx: np.ndarray = np.empty(self.two_dim)
         self.dTdz: np.ndarray = np.empty(self.two_dim)
 
