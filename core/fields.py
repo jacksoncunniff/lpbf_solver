@@ -1,3 +1,5 @@
+from encodings.punycode import T
+
 import numpy as np
 from dataclasses import dataclass, field
 import numpy.typing as npt
@@ -13,34 +15,67 @@ class FlowField:
     """
     TODO docstring for fields classes
     """
-
     mesh: Mesh
-    uq: np.ndarray
-    w: np.ndarray
-    p: np.ndarray
-    T: np.ndarray
-    mu: np.ndarray
-    rho: np.ndarray
-    liquid_frac: np.ndarray
-    dgamma_dT: np.ndarray       # this will be a 1 x Nx array that contains the updated surface tension value 
-                                # from the Materials class curve, for top row of cells only. calculated from dT of those cells
+    Nq: int = 0
+    Nz: int = 0
 
-    uq_old: np.ndarray
-    w_old: np.ndarray
+    two_dim: tuple[int, int] = field(init=False)
+    one_dim: int = field(init=False)
 
-    uq_star: np.ndarray
-    w_star: np.ndarray
-    p_prime: np.ndarray
+    uq: np.ndarray =  field(init=False)
+    w: np.ndarray =  field(init=False)
+    p: np.ndarray =  field(init=False)
+    T: np.ndarray =  field(init=False)
+    mu: np.ndarray =  field(init=False)
+    rho: np.ndarray =  field(init=False)
+    liquid_frac: np.ndarray =  field(init=False)
+    dgamma_dT: np.ndarray =  field(init=False)
 
-    dpdx: np.ndarray
-    dpdz: np.ndarray
+    uq_old: np.ndarray =  field(init=False)
+    w_old: np.ndarray =  field(init=False)
 
-    dudx: np.ndarray
-    dwdx: np.ndarray
-    
+    uq_star: np.ndarray =  field(init=False)
+    w_star: np.ndarray =  field(init=False)
+    p_prime: np.ndarray =  field(init=False)
 
-    dTdx: np.ndarray
-    dTdz: np.ndarray
+    dpdx: np.ndarray =  field(init=False)
+    dpdz: np.ndarray =  field(init=False)
+
+    dudx: np.ndarray =  field(init=False)
+    dwdx: np.ndarray =  field(init=False)
+
+    dTdx: np.ndarray =  field(init=False)
+    dTdz: np.ndarray =  field(init=False)
+
+
+    def __post_init__(self) -> None:
+
+        self.two_dim = (self.Nz, self.Nq)
+        # self.N = self.Nz * self.Nq
+        self.one_dim = self.Nq * self.Nz
+
+        self.uq: np.ndarray = np.empty(self.two_dim)
+        self.w: np.ndarray = np.empty(self.two_dim)
+        self.p: np.ndarray = np.empty(self.two_dim)
+        self.T: np.ndarray = np.empty(self.two_dim)
+        self.mu: np.ndarray = np.empty(self.two_dim)
+        self.rho: np.ndarray = np.empty(self.two_dim)
+        self.liquid_frac: np.ndarray = np.empty(self.two_dim)
+        self.dgamma_dT: np.ndarray = np.empty(self.Nq)
+                                    # this will be a 1 x Nx array that contains the updated surface tension value 
+                                    # from the Materials class curve, for top row of cells only. calculated from dT of those cells
+
+        self.uq_old: np.ndarray = np.empty(self.two_dim)
+        self.w_old: np.ndarray = np.empty(self.two_dim)
+        self.uq_star: np.ndarray = np.empty(self.two_dim)
+        self.w_star: np.ndarray = np.empty(self.two_dim)
+        self.p_prime: np.ndarray = np.empty(self.two_dim)
+        self.dpdx: np.ndarray = np.empty(self.two_dim)
+        self.dpdz: np.ndarray = np.empty(self.two_dim)
+        self.dudx: np.ndarray = np.empty(self.two_dim)
+        self.dwdx: np.ndarray = np.empty(self.two_dim)
+        self.dTdx: np.ndarray = np.empty(self.two_dim)
+        self.dTdz: np.ndarray = np.empty(self.two_dim)
 
     def calculate_pressure_gradients(self):
         """

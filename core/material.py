@@ -10,15 +10,15 @@ class Material:
     """
 
     # Properties as a function of temperature   
-    rho_t: np.ndarray
-    mu_t: np.ndarray
-    dgamma_dT: np.ndarray
-    specific_heat: float                # Cp of powder metal
+    # rho_t: np.ndarray
+    # mu_t: np.ndarray
+    # dgamma_dT: np.ndarray
+    # specific_heat: float                # Cp of powder metal
 
 
 
-Ti6Al4V = Material(
-    rho_t = np.ndarray()
+# Ti6Al4V = Material(
+#     rho_t = np.ndarray()
 
 
-)
+# )

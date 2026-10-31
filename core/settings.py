@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
-from token import ISNONTERMINAL
+from typing import Literal
 
+RunMode = Literal["test", "solve"]
 
 
 @dataclass
@@ -15,6 +16,7 @@ class SolveSettings:
 
     convergence_depth_delta: float
     simple_iterations_max: int
+    mode: RunMode = "solve"
 
 
 
