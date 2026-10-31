@@ -1,5 +1,4 @@
 import numpy as np
-from sympy.crypto import elgamal_private_key
 
 from core.fields import FaceField, FlowField
 from core.mesh import Mesh
@@ -271,14 +270,90 @@ class MomentumAssembler:
         return self.Au, self.bu, self.Au.diagonal()
 
 
-    def assemble_w(self, fields, faces, dt):
-        """Construct A_w and b_w."""
-        pass
+    def assemble_w(self, fields: FlowField, faces: FaceField, dt):
+        """
+        Construct A_w and b_w.
+        
+        This will utilize an array slicing centric approach, that is hopefully
+        more compact then assemble_u()
+        
+        """
+
+        # Reset coeff matrix that is being returned
+        self.Aw = np.empty((self.N, self.N))
+        self.bw = np.empty(self.N)
+
+        # Intermediate link coeff matrices that will each be determined individually
+        shape = (self.mesh.Nz, self.mesh.Ny)
+        aE = np.empty(shape)
+        aW = np.empty(shape)
+        aS = np.empty(shape)
+        aN = np.empty(shape)
+        aP = np.empty(shape)
+        a0 = np.empty(shape)
+        b = np.empty(shape)
+
+        # Flux matrices
+        Fe = faces.flux_q[:, 1:]    #flux_q is Nx+1 in columns, since it has fluxes stored a face for cells
+        Fw = faces.flux_q[:, :-1]   #take flux face values except for final column (would represent east flux for final cell)
+        Fs = faces.flux_w[1:, :]    
+        Fn = faces.flux_w[:-1, :]
+
+        # Diffusion matrices
+        De = np.empty(shape)
+        Dw = np.empty(shape)
+        Ds = np.empty(shape)
+        Dn = np.empty(shape)
+
+        #interpolate interior mu face values for diffusion coeff.
+        mu_q = 0.5 * (fields.mu[:, :-1] + fields.mu[:, 1:])
+        mu_z = 0.5 * (fields.mu[:-1, :] + fields.mu[1:, :])
+
+        De[:, :-1]  = self.mesh.dz / self.mesh.dx * mu_q
+        Dw[:, 1:]   = self.mesh.dz / self.mesh.dx * mu_q
+        Ds[:-1, :]  = 2 * self.mesh.dx / self.mesh.dz * mu_z
+        Dn[1:, :]   = 2 * self.mesh.dx / self.mesh.dz * mu_z        
+
+        # Boundary diffusion
+        De[:, -1] = self.mesh.dz / self.mesh.dx * fields.mu[:, -1] / 2          #De for right
+        Dw[:, 0] = self.mesh.dz / self.mesh.dx * fields.mu[:, 0] / 2            #Dw for left
+        Ds[-1, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[-1, :] / 2      #Ds for bottom row
+        
+        # double check this formulation for the top surface.... TODO
+        Dn[0, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[0, :] / 2        #Dn for top surface
+
+        ## Construct links with upwinding
+        aE = De + max(-Fe, 0)
+        aW = Dw + max(Fw, 0)
+        aS = Ds + max(-Fs, 0)
+        aN = Dn + max(Fn, 0)
+        a0 = fields.rho * (self.mesh.dx * self.mesh.dz) / dt
 
 
-        ## Following three methods only return the link coefficients for assembly methods
-        ## to place them into the greater Au or Aw matrix
-        ## Aw component option is not enabled yet TODO
+        # This must happen before zero-out block because central coeff. needs the boundary cell diffusion contribution
+        # it is then zero-ed out because there is no neighboring cell on the boundary
+        aP = aE + aW + aN + aS + (Fe - Fw + Fs - Fn) + a0
+
+
+        ## Zero-out non neighbors   ~  should handle corners automatically too!
+        aE[:, -1] = 0.0         # no right cell neighbors on last col
+        aW[:, 0] = 0.0          # no left cell neighbors on first col
+        aN[0, :] = 0.0          # no top cell neighbors on top row
+        aS[-1, :] = 0.0         # no bottom cell neighbors on bottom row
+
+        aP = aP.ravel()
+
+        # RHS
+
+        # transient contribution from a0 * w at time step
+        # transposed momentum from u velocity
+        # source momentum from mushy zone
+        # source surface tension from marangoni effect
+
+
+
+        return self.Aw, self.bw, aP
+
     def _face_coefficients_interoir(self, fields: FlowField, faces: FaceField, i, j, component: MomentumComponent, dt):
         """
         Idea for this method is to assemble and return the face coefficients (aN, aS, aW, aE)
