@@ -97,7 +97,8 @@ class SIMPLEcfd:
             Cw,
         )
         Nz = self.mesh.Nz
-        k = (Nz-1)*Nz + 1
+        Nx = self.mesh.Nx
+        k = (Nz-1)*Nx + 1
         Ap = Ap.tolil(copy=True)
         Ap[:, k] = 0
         Ap[k, :] = 0

@@ -282,7 +282,7 @@ def benchmark_u_assembly(
 
 
 def test_simple_closed_box(perturb_pressure=False):
-    Nx, Nz = 7, 5
+    Nx, Nz = 8, 12
     dt = 0.01
 
     mesh = Mesh(
