@@ -55,29 +55,29 @@ class FlowField:
         # self.N = self.Nz * self.Nq
         self.one_dim = self.Nq * self.Nz
 
-        self.uq: np.ndarray = np.empty(self.two_dim)
-        self.w: np.ndarray = np.empty(self.two_dim)
-        self.p: np.ndarray = np.empty(self.two_dim)
-        self.T: np.ndarray = np.empty(self.two_dim)
-        self.mu: np.ndarray = np.empty(self.two_dim)
-        self.rho: np.ndarray = np.empty(self.two_dim)
-        self.liquid_frac: np.ndarray = np.empty(self.two_dim)
-        self.dgamma_dT: np.ndarray = np.empty(self.Nq)
+        self.uq: np.ndarray = np.zeros(self.two_dim)
+        self.w: np.ndarray = np.zeros(self.two_dim)
+        self.p: np.ndarray = np.zeros(self.two_dim)
+        self.T: np.ndarray = np.zeros(self.two_dim)
+        self.mu: np.ndarray = np.zeros(self.two_dim)
+        self.rho: np.ndarray = np.zeros(self.two_dim)
+        self.liquid_frac: np.ndarray = np.zeros(self.two_dim)
+        self.dgamma_dT: np.ndarray = np.zeros(self.Nq)
                                     # this will be a 1 x Nx array that contains the updated surface tension value 
                                     # from the Materials class curve, for top row of cells only. calculated from dT of those cells
 
-        self.uq_old: np.ndarray = np.empty(self.two_dim)
-        self.w_old: np.ndarray = np.empty(self.two_dim)
-        self.uq_star: np.ndarray = np.empty(self.two_dim)
-        self.w_star: np.ndarray = np.empty(self.two_dim)
-        self.p_prime: np.ndarray = np.empty(self.two_dim)
-        self.dpdx: np.ndarray = np.empty(self.two_dim)
-        self.dpdz: np.ndarray = np.empty(self.two_dim)
-        self.dudx: np.ndarray = np.empty(self.two_dim)
-        self.dwdx: np.ndarray = np.empty(self.two_dim)
-        self.dudz: np.ndarray = np.empty(self.two_dim)
-        self.dTdx: np.ndarray = np.empty(self.two_dim)
-        self.dTdz: np.ndarray = np.empty(self.two_dim)
+        self.uq_old: np.ndarray = np.zeros(self.two_dim)
+        self.w_old: np.ndarray = np.zeros(self.two_dim)
+        self.uq_star: np.ndarray = np.zeros(self.two_dim)
+        self.w_star: np.ndarray = np.zeros(self.two_dim)
+        self.p_prime: np.ndarray = np.zeros(self.two_dim)
+        self.dpdx: np.ndarray = np.zeros(self.two_dim)
+        self.dpdz: np.ndarray = np.zeros(self.two_dim)
+        self.dudx: np.ndarray = np.zeros(self.two_dim)
+        self.dwdx: np.ndarray = np.zeros(self.two_dim)
+        self.dudz: np.ndarray = np.zeros(self.two_dim)
+        self.dTdx: np.ndarray = np.zeros(self.two_dim)
+        self.dTdz: np.ndarray = np.zeros(self.two_dim)
 
     def calculate_pressure_gradients(self):
         """
@@ -171,7 +171,21 @@ class FlowField:
 class FaceField:
     """
     """
+    mesh: Mesh
+    flux_q: FloatArray = field(init=False)
+    flux_w: FloatArray = field(init=False)
+    flux_q_star: FloatArray = field(init=False)
+    flux_w_star: FloatArray = field(init=False)
 
-    flux_q: FloatArray
-    flux_w: FloatArray
+    def __post_init__(self):
+        # Nj + 1 in dimension because it also holds boundary data
+        shape_q = (self.mesh.Nz, self.mesh.Nx+1)
+        shape_w = (self.mesh.Nz+1, self.mesh.Nx)
+        flux_q = np.zeros(shape_q)
+        flux_q_star = np.zeros(shape_q)
+        
+        flux_w = np.zeros(shape_w)
+        flux_w_star = np.zeros(shape_w)
+        pass
+
 

@@ -1,15 +1,17 @@
 import numpy as np
-from dataclasses import dataclass, field
+from scipy.sparse.linalg import spsolve
+
+from core import fields, material
+from core.settings import SolveSettings
 
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
 from core.boundary_conditions import BoundaryConditions
 
-from discretization.momentum import u_link_coefficients, w_link_coefficients
-from discretization.pressure import pressure_correction
-from discretization.interpolation import face_fluxes
-
-from core.settings import SolveSettings
+from discretization.momentum import MomentumAssembler
+from discretization.pressure import assemble_pressure_corrector, face_velocity_interpolation, scalar_pressure_gradient
+# from discretization.pressure import pressure_correction
+# from discretization.interpolation import face_fluxes
 
 
 
@@ -24,73 +26,171 @@ class SIMPLEcfd:
 
     def __init__(self, 
                  settings: SolveSettings, 
-                 
+                 fields: FlowField,
+                 faces: FaceField,
+                 mesh: Mesh,
+                 dt: float,
+                 material: material.Material
                  ):
+
+        self.dx = mesh.dx
+        self.dz = mesh.dz
+        self.dy = mesh.dy
+        self.Nx = mesh.Nx
+        self.Nz = mesh.Nz
+        self.N = self.Nx * self.Nz
+
+        self.fields = fields
+        self.mesh = mesh
+        self.faces = faces
+        self.dt = dt
+        self.material = material
+        self.settings = settings
+        self.assembler = MomentumAssembler(self.mesh, self.material)
+
+    def _solve_momentum(self):
+        shape = (self.Nz, self.Nx)
+        Au, bu, aPu = self.assembler.assemble_u(self.fields, self.faces, self.dt)
+        Aw, bw, aPw = self.assembler.assemble_w(self.fields, self.faces, self.dt)
+
+        uq_star = spsolve(Au, bu)
+        w_star = spsolve(Aw, bw)
+
+        # residual_q = bu - Au @ uq_star
+        # residual_w = bw - Aw @ w_star
+
+        self.fields.uq_star[:] = uq_star.reshape(shape)
+        self.fields.w_star[:] = w_star.reshape(shape)
+
+        # return aPu, aPw, residual_q, residual_w
+        return aPu, aPw
+
+    def _solve_pressure_correction(self, Cp, Cw):
+        """Routine to solve pressure corrections after finding rhie chow face velocities
+
+        Returns:
+            _type_: _description_
+        """
+
+        Ap, bp, Cw_full, Cq_full = assemble_pressure_corrector(
+            self.mesh,
+            self.faces.flux_q_star,
+            self.faces.flux_w_star,
+            Cp,
+            Cw,
+        )
         
+        pprime_flat = spsolve(Ap, bp.ravel())
+        pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))
 
+        numerical_residual = bp - Ap @ pprime_flat
 
+        return pprime, Cq_full, Cw_full
 
+    def _correct_fluxes(self, pprime, Cq_full, Cw_full):
 
+        self.faces.flux_q[:] = self.faces.flux_q_star
+        self.faces.flux_w[:] = self.faces.flux_w_star
 
+        # increment internal horizontal faces.
+        self.faces.flux_q[:, 1:-1] -= Cq_full[:, 1:-1] * (
+            pprime[:, 1:] - pprime[:, :-1]
+        )
 
+        # " " internal vertical faces. MUST KEEP EXTERNAL FLUXES 0
+        # BOUNDARY CONDITIONS ENFORCE NO NORMAL FLUX
+        self.faces.flux_w[1:-1, :] -= Cw_full[1:-1, :] * (
+            pprime[1:, :] - pprime[:-1, :]
+        )
 
+        pass
 
+    def _correct_cell_velocity(self, aPu, aPw, pprime):
+        V = self.mesh.dx * self.mesh.dz
+        du = V / aPu.reshape((self.mesh.Nz, self.mesh.Nx))
+        dw = V / aPw.reshape((self.mesh.Nz, self.mesh.Nx))
 
+        dPp_dx, dPp_dz = scalar_pressure_gradient(pprime)
 
+        pass
 
-
-
-
-
-depth_convergence = 0.0001 # [m]
-depth_change = 1
-t = 0 # initial time [s]
-m = 0 # initial iteration count
-dt = 0.001 # [s]
-
-## timesteps for X-Z plane
-
-
-
-while depth_change > depth_convergence:
-    t = (m+1)*dt
-
-    # temperature module
-    update_material_properties(xz)  ## TODO
-
-    heating_module(xz["T"], t)
-
-    update_material_properties(xz)
-
-    simple_loop(1000)
-
-    energy_conservation(xz)  ## TODO
-    depth_change = compute_melt_pool_depth(xz)  ## TODO
-
-## simple loop?
-def simple_loop(max_iters):
-    for iteration in range(max_iters):
-
-        xz["dpdx"], xz["dpdz"] = calculate_pressure_gradients(xz["p"])
-
-        # X-momentum RHS uses dpdx
-        A_u, b_u = assemble_u_mom(xz, xz["dpdx"])
-        xz = solve_u_star(A_u, b_u)
-
-        # Z-momentum RHS uses dpdz
-        A_w, b_w = assemble_w_mom(xz, xz["dpdz"])
-        xz = solve_w_star(A_w, b_w)
-
-        # Rhie-Chow, and pressure correction...
-        xz["flux_q"], xz["flux_z"] = face_fluxes(xz)
+    def _correct_pressure(self, relaxation_factor, pprime):
         
+        self.fields.p += relaxation_factor * pprime
 
-        # guess pressure field p_star
-        # solve momentum equations to find 
-            # u_star
-            # w_star
-        # solve p' equation
-        # calculate p from p' + p_star
-        # calculate u, w from correction formulas
-        # solve for other transport properties
-        # use new pressure as next pressure guess p_star
+        pass
+
+    def _check_convergence(self,) -> bool:
+
+        continuity = self._continuity_residual()
+        continuity_max_norm = np.max(continuity)
+        continuity_L2_norm = np.linalg.norm(continuity)
+
+
+        Ru, Rw = self._momentum_residual()
+        Ru_max = np.max(Ru)
+        Ru_L2_norm = np.linalg.norm(Ru)
+        Rw_max = np.max(Rw)
+        Rw_L2_norm = np.linalg.norm(Rw)
+
+
+        
+        return False
+
+    def _continuity_residual(self):
+
+        flux_e = self.faces.flux_q[:, 1:]
+        flux_w = self.faces.flux_q[:, :-1]
+        flux_s = self.faces.flux_w[1:, :]
+        flux_n = self.faces.flux_w[:-1, :]
+        r = (flux_e - flux_w) + (flux_s - flux_n)
+
+        return r
+
+    def _momentum_residual(self):
+        shape = (self.mesh.Nz, self.mesh.Nx)
+
+        Au, bu, _ = self.assembler.assemble_u(self.fields, self.faces, self.dt)
+        Aw, bw, _ = self.assembler.assemble_w(self.fields, self.faces, self.dt)
+
+        Ru = (
+            np.asarray(bu).ravel()
+            - Au @ self.fields.uq.ravel()
+        ).reshape(shape)
+
+        Rw = (
+            np.asarray(bw).ravel()
+            - Aw @ self.fields.w.ravel()
+        ).reshape(shape)
+
+        return Ru, Rw
+
+    def run(self,):
+        """Executes SIMPLE loop at one time step
+        """
+
+        aPu, aPw = self._solve_momentum()
+        
+        uface, wface, Cq, Cw = face_velocity_interpolation(
+            self.fields,
+            self.faces,
+            self.mesh,
+            aPu,    
+            aPw
+        )
+
+        self.faces.flux_q_star
+
+        pprime, Cq_full, Cw_full = self._solve_pressure_correction(Cq, Cw)
+        
+        self._correct_fluxes(pprime, Cq_full, Cw_full)
+
+        self._correct_cell_velocity(aPu, aPw, pprime)
+
+        self._correct_pressure(self.settings.relaxation_factor, pprime)
+
+        convergence = self._check_convergence()
+
+
+
+        
