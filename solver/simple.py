@@ -120,22 +120,40 @@ class SIMPLEcfd:
 
         pass
 
-    def _check_convergence(self,) -> bool:
+    def _check_convergence(self,criteria = 1e-6, iteration = 0) -> bool:
+    
+        if iteration<3:
+            return False
+        
+        V = self.mesh.dx * self.mesh.dz
+
 
         continuity = self._continuity_residual()
         continuity_max_norm = np.max(continuity)
         continuity_L2_norm = np.linalg.norm(continuity)
 
+        # conditions to non-dimensionalize the residuals
+        rho_ref = 4000  # change these to starting values later
+        u_ref = 5
+        L_ref = 1
+        mu_ref = 0.004
+
+        momentum_scaling = (rho_ref*u_ref**2/L_ref + mu_ref*u_ref/L_ref**2)
 
         Ru, Rw = self._momentum_residual()
-        Ru_max = np.max(Ru)
-        Ru_L2_norm = np.linalg.norm(Ru)
-        Rw_max = np.max(Rw)
-        Rw_L2_norm = np.linalg.norm(Rw)
+        Ru_max = np.max(Ru/V)
+        Ru_L2_norm = np.linalg.norm(Ru/V)
+        Rw_max = np.max(Rw/V)
+        Rw_L2_norm = np.linalg.norm(Rw/V)
 
+        momentum_errors = max(Ru_max/momentum_scaling, Rw_max/momentum_scaling)
+        continuity_errors = continuity_max_norm / (V*rho_ref) * L_ref / u_ref
+        errors = np.array([momentum_errors, continuity_errors])
 
-        
-        return False
+        if np.all(errors < criteria):
+            return True
+        else:
+            return False
 
     def _continuity_residual(self):
 
@@ -168,28 +186,32 @@ class SIMPLEcfd:
     def run(self,):
         """Executes SIMPLE loop at one time step
         """
+        converged = False
+        iteration = 0
+        while not converged:
 
-        aPu, aPw = self._solve_momentum()
-        
-        uface, wface, Cq, Cw = face_velocity_interpolation(
-            self.fields,
-            self.faces,
-            self.mesh,
-            aPu,    
-            aPw
-        )
+            aPu, aPw = self._solve_momentum()
+            
+            uface, wface, Cq, Cw = face_velocity_interpolation(
+                self.fields,
+                self.faces,
+                self.mesh,
+                aPu,    
+                aPw
+            )
 
-        self.faces.flux_q_star
+            self.faces.flux_q_star
 
-        pprime, Cq_full, Cw_full = self._solve_pressure_correction(Cq, Cw)
-        
-        self._correct_fluxes(pprime, Cq_full, Cw_full)
+            pprime, Cq_full, Cw_full = self._solve_pressure_correction(Cq, Cw)
+            
+            self._correct_fluxes(pprime, Cq_full, Cw_full)
 
-        self._correct_cell_velocity(aPu, aPw, pprime)
+            self._correct_cell_velocity(aPu, aPw, pprime)
 
-        self._correct_pressure(self.settings.relaxation_factor, pprime)
+            self._correct_pressure(self.settings.relaxation_factor, pprime)
 
-        convergence = self._check_convergence()
+            converged = self._check_convergence(iteration=iteration)
+            iteration += 1
 
 
 
