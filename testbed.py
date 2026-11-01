@@ -1,34 +1,29 @@
 """
-
 This file is intended to run and test output of individual classes.
 In particular, the momentum assembly is being tested for small meshes to 
 valildate coefficients for SIMPLE.
-
-
 """
 
-
 # packages
-import numpy as np
-import argparse
 import os
+import timeit
+import argparse
+import warnings
+import numpy as np
+
+from statistics import median
 from scipy.sparse import issparse
 from scipy.sparse.linalg import spsolve
-import timeit
-from statistics import median
-
-
+from scipy.sparse.linalg import MatrixRankWarning
 
 # Local classes
 from core.material import Material
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
 from core.settings import SolveSettings, PlotSettings
-
 from discretization.momentum import MomentumAssembler
-# from solver.simple import SIMPLEcfd
-# from physics.heat_source import LaserSource
 
+from solver.simple import SIMPLEcfd
 
 
 def main():
@@ -286,6 +281,96 @@ def benchmark_u_assembly(
     print(f"Loop time / vectorized time: {speedup:.2f}×")
 
 
+def test_simple_closed_box(perturb_pressure=False):
+    Nx, Nz = 7, 5
+    dt = 0.01
+
+    mesh = Mesh(
+        Lx=1.0, Ly=1.0, Lz=1.0,
+        Nx=Nx, Ny=Nx, Nz=Nz,
+        dt=dt,
+    )
+
+    fields = FlowField(mesh=mesh, Nq=Nx, Nz=Nz)
+    faces = FaceField(mesh=mesh)
+
+    # Rest state with no thermal or surface forcing.
+    for name in (
+        "uq", "w", "uq_old", "w_old",
+        "uq_star", "w_star", "p", "p_prime",
+        "dpdx", "dpdz", "dudx", "dwdx", "dudz",
+        "dTdx", "dTdz", "dgamma_dT",
+    ):
+        getattr(fields, name).fill(0.0)
+
+    fields.rho.fill(1.0)
+    fields.mu.fill(0.01)
+    fields.liquid_frac.fill(1.0)
+
+    if perturb_pressure:
+        j, i = np.indices((Nz, Nx))
+        fields.p[:] = 1e-3 * (-1.0) ** (i + j)
+        fields.p[:] -= fields.p.mean()
+
+    settings = SolveSettings(
+        convergence_depth_delta=0.0,
+        simple_iterations_max=100,
+        mode="test",
+        relaxation_factor=0.5,
+    )
+
+    solver = SIMPLEcfd(
+        settings=settings,
+        fields=fields,
+        faces=faces,
+        mesh=mesh,
+        dt=dt,
+        material=Material(),
+    )
+
+    # Fail immediately on singular pressure systems or invalid arithmetic.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", MatrixRankWarning)
+
+        with np.errstate(over="raise", divide="raise", invalid="raise"):
+            solver.run(maxIters=50)
+
+    for name, array in (
+        ("uq", fields.uq),
+        ("w", fields.w),
+        ("p", fields.p),
+        ("flux_q", faces.flux_q),
+        ("flux_w", faces.flux_w),
+    ):
+        assert np.isfinite(array).all(), f"{name} is nonfinite"
+
+    continuity = (
+        faces.flux_q[:, 1:] - faces.flux_q[:, :-1]
+        + faces.flux_w[1:, :] - faces.flux_w[:-1, :]
+    )
+
+    # Suggested tolerances for this simple nondimensional test.
+    assert np.max(np.abs(continuity)) < 1e-10
+    assert np.max(np.abs(fields.uq)) < 1e-6
+    assert np.max(np.abs(fields.w)) < 1e-6
+
+    # Pressure should become spatially constant; its offset is arbitrary.
+    assert np.ptp(fields.p) < 1e-6
+
+    np.testing.assert_allclose(
+        faces.flux_q[:, [0, -1]], 0.0, rtol=0, atol=1e-14
+    )
+    np.testing.assert_allclose(
+        faces.flux_w[[0, -1], :], 0.0, rtol=0, atol=1e-14
+    )
+
+    # SIMPLE must not advance the previous-time fields.
+    assert np.all(fields.uq_old == 0.0)
+    assert np.all(fields.w_old == 0.0)
+
+    print(f"PASS: closed box, pressure perturbation={perturb_pressure}")
 
 if __name__ == "__main__":
-    main()
+    test_simple_closed_box()
+    test_simple_closed_box(True)
+    

@@ -19,9 +19,14 @@ def face_velocity_interpolation(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     dx = mesh.dx
     dz = mesh.dz
+    Nx = mesh.Nx
+    Nz = mesh.Nz
     V = dz*dx
     uface: np.ndarray
     wface: np.ndarray
+
+    Apu = Apu.reshape(Nz, Nx)
+    Apw = Apw.reshape(Nz, Nx)
 
     du = V / Apu
     dw = V / Apw
@@ -44,8 +49,8 @@ def face_velocity_interpolation(
     wbar = 0.5*(fields.w_star[:-1, :] + fields.w_star[1:, :])
 
 
-    uface = ubar + du_bar*(px_face - dpdx_bar)
-    wface = wbar + dw_bar*(pz_face - dpdz_bar)
+    uface = ubar - du_bar*(px_face - dpdx_bar)
+    wface = wbar - dw_bar*(pz_face - dpdz_bar)
 
     ### FLUX CORRECTION TO FIELD VARS.
 
@@ -65,8 +70,8 @@ def assemble_pressure_corrector(
 ):
 
 
-    Cq_full = np.zeros(mesh.Nz, mesh.Nx+1)
-    Cw_full = np.zeros(mesh.Nz+1, mesh.Nx)
+    Cq_full = np.zeros((mesh.Nz, mesh.Nx+1))
+    Cw_full = np.zeros((mesh.Nz+1, mesh.Nx))
 
     Cq_full[:, 1:-1] = Cq
     Cw_full[1:-1, :] = Cw
@@ -94,11 +99,14 @@ def assemble_pressure_corrector(
     return Ap, bp, Cq_full, Cw_full
 
 
-def scalar_pressure_gradient(pressure_field):
+def scalar_pressure_gradient(pressure_field, dx, dz):
 
-    dpdx = 0.5 * (pressure_field[:, :-1] + pressure_field[:, 1:])
-    dpdz = 0.5 * (pressure_field[:-1, :] + pressure_field[1:, :])
-
+    dpdz, dpdx = np.gradient(
+        pressure_field,
+        dz,
+        dx,
+        edge_order=1,
+    )
     return dpdx, dpdz
 
 def _build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz):
@@ -109,29 +117,29 @@ def _build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz):
         north = k[k >= Nx]
         south = k[k < N - Nx]
 
-        rows = [
+        rows = np.concatenate([
             k,
             east,
             west,
             north,
             south
-        ]
+        ])
 
-        cols = [
+        cols = np.concatenate([
             k,
             east+1,
             west-1,
             north-Nx,
             south+Nx
-        ]
+        ])
 
-        values = [
-            aP,
-            aE,
-            aW,
-            aN,
-            aS
-        ]
+        values = np.concatenate([
+            aP.ravel(),
+            -aE.ravel()[east],
+            -aW.ravel()[west],
+            -aN.ravel()[north],
+            -aS.ravel()[south]
+        ])
 
-        A = coo_array((values, (rows, cols)), shape=(Nz, Nx))
+        A = coo_array((values, (rows, cols)), shape=(N, N)).tocsr()
         return A

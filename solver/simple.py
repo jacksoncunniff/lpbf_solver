@@ -65,6 +65,23 @@ class SIMPLEcfd:
         # return aPu, aPw, residual_q, residual_w
         return aPu, aPw
 
+    def _refresh_gradients(self):
+        f = self.fields
+
+        f.dpdx[:], f.dpdz[:] = scalar_pressure_gradient(
+            f.p, self.dx, self.dz
+        )
+
+        f.dudx[:], f.dudz[:] = scalar_pressure_gradient(
+            f.uq, self.dx, self.dz
+        )
+
+        dwdx, _ = scalar_pressure_gradient(
+            f.w, self.dx, self.dz
+        )
+        f.dwdx[:] = dwdx
+
+
     def _solve_pressure_correction(self, Cp, Cw):
         """Routine to solve pressure corrections after finding rhie chow face velocities
 
@@ -72,18 +89,26 @@ class SIMPLEcfd:
             _type_: _description_
         """
 
-        Ap, bp, Cw_full, Cq_full = assemble_pressure_corrector(
+        Ap, bp, Cq_full, Cw_full = assemble_pressure_corrector(
             self.mesh,
             self.faces.flux_q_star,
             self.faces.flux_w_star,
             Cp,
             Cw,
         )
+        Nz = self.mesh.Nz
+        k = (Nz-1)*Nz + 1
+        Ap = Ap.tolil(copy=True)
+        Ap[:, k] = 0
+        Ap[k, :] = 0
+        Ap[k, k] = 1
+        bp.ravel()[k] = 0
+        Ap = Ap.tocsr(copy=True)
         
         pprime_flat = spsolve(Ap, bp.ravel())
         pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))
 
-        numerical_residual = bp - Ap @ pprime_flat
+        # numerical_residual = bp - Ap @ pprime_flat
 
         return pprime, Cq_full, Cw_full
 
@@ -110,9 +135,11 @@ class SIMPLEcfd:
         du = V / aPu.reshape((self.mesh.Nz, self.mesh.Nx))
         dw = V / aPw.reshape((self.mesh.Nz, self.mesh.Nx))
 
-        dPp_dx, dPp_dz = scalar_pressure_gradient(pprime)
+        dPp_dx, dPp_dz = scalar_pressure_gradient(pprime, self.mesh.dx, self.mesh.dz)
 
-        pass
+        self.fields.uq[:] = self.fields.uq_star - du * dPp_dx
+        self.fields.w[:] = self.fields.w_star - dw * dPp_dz
+
 
     def _correct_pressure(self, relaxation_factor, pprime):
         
@@ -122,26 +149,26 @@ class SIMPLEcfd:
 
     def _check_convergence(self,criteria = 1e-6, iteration = 0) -> bool:
     
-        if iteration<3:
+        if iteration < 3:
             return False
         
         V = self.mesh.dx * self.mesh.dz
 
 
         continuity = self._continuity_residual()
-        continuity_max_norm = np.max(continuity)
+        continuity_max_norm = np.max(np.abs(continuity))
         continuity_L2_norm = np.linalg.norm(continuity)
 
         # conditions to non-dimensionalize the residuals
-        rho_ref = 4000  # change these to starting values later
-        u_ref = 5
-        L_ref = 1
-        mu_ref = 0.004
+        rho_ref = 1.0
+        u_ref = 1.0 
+        L_ref = 1.0
+        mu_ref = 0.01
 
         momentum_scaling = (rho_ref*u_ref**2/L_ref + mu_ref*u_ref/L_ref**2)
 
         Ru, Rw = self._momentum_residual()
-        Ru_max = np.max(Ru/V)
+        Ru_max = np.max(np.abs(Ru/V))
         Ru_L2_norm = np.linalg.norm(Ru/V)
         Rw_max = np.max(Rw/V)
         Rw_L2_norm = np.linalg.norm(Rw/V)
@@ -151,7 +178,7 @@ class SIMPLEcfd:
         errors = np.array([momentum_errors, continuity_errors])
 
         if np.all(errors < criteria):
-            return True
+            return bool(np.isfinite(errors).all() and np.all(errors < criteria))
         else:
             return False
 
@@ -183,13 +210,14 @@ class SIMPLEcfd:
 
         return Ru, Rw
 
-    def run(self,):
+    def run(self, maxIters):
         """Executes SIMPLE loop at one time step
         """
         converged = False
         iteration = 0
         while not converged:
 
+            self._refresh_gradients()
             aPu, aPw = self._solve_momentum()
             
             uface, wface, Cq, Cw = face_velocity_interpolation(
@@ -200,18 +228,18 @@ class SIMPLEcfd:
                 aPw
             )
 
-            self.faces.flux_q_star
+            # self.faces.flux_q_star
 
             pprime, Cq_full, Cw_full = self._solve_pressure_correction(Cq, Cw)
-            
             self._correct_fluxes(pprime, Cq_full, Cw_full)
-
             self._correct_cell_velocity(aPu, aPw, pprime)
-
             self._correct_pressure(self.settings.relaxation_factor, pprime)
+            self._refresh_gradients()
 
             converged = self._check_convergence(iteration=iteration)
             iteration += 1
+            if iteration > maxIters:
+                break
 
 
 

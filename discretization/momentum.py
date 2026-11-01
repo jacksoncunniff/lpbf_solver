@@ -132,7 +132,7 @@ class MomentumAssembler:
         """
         # Reset coeff matrix that is being returned
         Aw = np.zeros((self.N, self.N), dtype=np.float64)
-        bw = np.empty((self.mesh.Nz, self.mesh.Nx))
+        bw = np.zeros((self.mesh.Nz, self.mesh.Nx))
 
         # Intermediate link coeff matrices that will each be determined individually
         shape = (self.mesh.Nz, self.mesh.Nx)
@@ -248,29 +248,29 @@ class MomentumAssembler:
         north = k[k >= Nx]
         south = k[k < N - Nx]
 
-        rows = [
+        rows = np.concatenate([
             k,
             east,
             west,
             north,
             south
-        ]
+        ])
 
-        cols = [
+        cols = np.concatenate([
             k,
             east+1,
             west-1,
             north-Nx,
             south+Nx
-        ]
+        ])
 
-        values = [
-            aP,
-            aE,
-            aW,
-            aN,
-            aS
-        ]
+        values = np.concatenate([
+            aP.ravel(),
+            -aE.ravel()[east],
+            -aW.ravel()[west],
+            -aN.ravel()[north],
+            -aS.ravel()[south]
+        ])
 
-        A = coo_array((values, (rows, cols)), shape=(Nz, Nx))
+        A = coo_array((values, (rows, cols)), shape=(N, N)).tocsr()
         return A

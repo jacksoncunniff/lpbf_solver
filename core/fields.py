@@ -181,11 +181,11 @@ class FaceField:
         # Nj + 1 in dimension because it also holds boundary data
         shape_q = (self.mesh.Nz, self.mesh.Nx+1)
         shape_w = (self.mesh.Nz+1, self.mesh.Nx)
-        flux_q = np.zeros(shape_q)
-        flux_q_star = np.zeros(shape_q)
+        self.flux_q = np.zeros(shape_q)
+        self.flux_q_star = np.zeros(shape_q)
         
-        flux_w = np.zeros(shape_w)
-        flux_w_star = np.zeros(shape_w)
+        self.flux_w = np.zeros(shape_w)
+        self.flux_w_star = np.zeros(shape_w)
         pass
 
 
