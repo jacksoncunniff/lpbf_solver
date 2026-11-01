@@ -82,7 +82,7 @@ def main():
         boundary_conditions=None
     )
 
-    A_u, b_u, A_diag = momentum.assemble_u_old(
+    A_u, b_u, A_diag = momentum.assemble_u(
         fields=fields,
         faces=faces,
         dt=dt

@@ -1,9 +1,11 @@
 import numpy as np
+from scipy.sparse import coo_array
 
+from core.boundary_conditions import BoundaryConditions
 from core.fields import FaceField, FlowField
 from core.mesh import Mesh
 from core.material import Material
-from typing import Literal
+from typing import Literal, Optional
 MomentumComponent = Literal["uq", "w"]
 BoundarySide = Literal["left", "bottom", "top", "right"]
 Corners = Literal["NW", "NE", "SW", "SE"]
@@ -15,23 +17,16 @@ class MomentumAssembler:
     Uses cell-centered velocity fields and face-centered
     mass fluxes on a structured collocated FVM mesh.
     """
-
-    def __init__(self, mesh: Mesh, material: Material, boundary_conditions):
+    def __init__(self, mesh: Mesh, material: Material, boundary_conditions: Optional[BoundaryConditions] = None):
         self.mesh = mesh
         self.material = material
         self.bc = boundary_conditions
-
         self.N = mesh.Nx * mesh.Nz
-        self.Au = np.empty((self.N, self.N))
-        self.bu = np.empty(self.mesh.Nx * self.mesh.Nz)
-        self.Aw = np.empty((self.N, self.N))
-        self.bw = np.empty(self.mesh.Nx * self.mesh.Nz)
 
     def assemble_u(self, fields: FlowField, faces: FaceField, dt):
-        
         # Reset coeff matrix that is being returned
-        self.Au = np.zeros((self.N, self.N), dtype=np.float64)
-        self.bu = np.zeros((self.mesh.Nz, self.mesh.Nx))
+        # Au = np.zeros((self.N, self.N), dtype=np.float64)
+        bu = np.zeros((self.mesh.Nz, self.mesh.Nx))
 
         # Intermediate link coeff matrices that will each be determined individually
         shape = (self.mesh.Nz, self.mesh.Nx)
@@ -78,7 +73,6 @@ class MomentumAssembler:
         aN = Dn + np.maximum(Fn, 0)
         a0 = fields.rho * (self.mesh.dx * self.mesh.dz) / dt
 
-
         # This must happen before zero-out block because central coeff. needs the boundary cell diffusion contribution
         # it is then zero-ed out because there is no neighboring cell on the boundary
         aP: np.ndarray = aE + aW + aN + aS + (Fe - Fw + Fs - Fn) + a0
@@ -93,28 +87,27 @@ class MomentumAssembler:
         V = self.mesh.dx * self.mesh.dz * 1
         
         # transient contribution from a0 * w at time step
-        self.bu += a0 * fields.uq_old - V * fields.dpdx
+        bu += a0 * fields.uq_old - V * fields.dpdx
 
         # transposed momentum from u velocity
         dwdx_z = 0.5 * (fields.dwdx[:-1, :] + fields.dwdx[1:, :])
         tau_cross = mu_z * dwdx_z
 
-        diffusion_stress = np.zeros_like(self.bu)
+        diffusion_stress = np.zeros_like(bu)
         diffusion_stress[:-1, :] += tau_cross * self.mesh.dx  # south
         diffusion_stress[1:, :]  -= tau_cross * self.mesh.dx  # north
 
         # source momentum from mushy zone
-        source_momentum_sink = np.zeros_like(self.bu)
+        source_momentum_sink = np.zeros_like(bu)
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.uq_old) * V
 
         # # source surface tension from marangoni effect
-        surface_tension = np.zeros_like(self.bu)
+        surface_tension = np.zeros_like(bu)
         surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
 
-        self.bu += diffusion_stress + source_momentum_sink + surface_tension
-        self.bu = self.bu.ravel()
+        bu += diffusion_stress + source_momentum_sink + surface_tension
+        bu = bu.ravel()
 
-        # print(f"aS: {aS}")
         aP = aP.ravel()
         aE = aE.ravel()
         aW = aW.ravel()
@@ -123,36 +116,23 @@ class MomentumAssembler:
 
         Nx = self.mesh.Nx
         Nz = self.mesh.Nz
-        k = np.arange(Nx * Nz)
-
-        # Arrays of indices that have the named neighbors
-        east  = k[k % Nx != Nx - 1]     # list of cells (k index) that have an east neighbor
-        west  = k[k % Nx != 0]
-        north = k[k >= Nx]
-        south = k[k < Nx * Nz - Nx]
-
-        # print(f"Aw shape = {self.Aw.shape}")
-        # print(f"{aE}")
-        self.Au[k, k]               = aP
-        self.Au[east, east+1]       = -aE[east]
-        self.Au[west, west-1]       = -aW[west]
-        self.Au[north, north-Nx]    = -aN[north]
-        self.Au[south, south+Nx]    = -aS[south]
-
-        return self.Au, self.bu, aP
+        Au = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
+        return Au, bu, aP
 
     def assemble_w(self, fields: FlowField, faces: FaceField, dt):
-        """
-        Construct A_w and b_w.
-        
-        This will utilize an array slicing centric approach, that is hopefully
-        more compact then assemble_u()
-        
-        """
+        """Assembly matrix for link coefficients to solve w-momentum equation
 
+        Args:
+            fields (FlowField): Field data from most recent m time step iteration
+            faces (FaceField): Flux data from most recent m time step iteration
+            dt (_type_): the time increment specified in solve
+
+        Returns:
+            Aw, bw, aP: Sparse momentum matrix, RHS vector, diagonals for aP
+        """
         # Reset coeff matrix that is being returned
-        self.A_w = np.zeros((self.N, self.N), dtype=np.float64)
-        self.bw = np.empty((self.mesh.Nz, self.mesh.Nx))
+        Aw = np.zeros((self.N, self.N), dtype=np.float64)
+        bw = np.empty((self.mesh.Nz, self.mesh.Nx))
 
         # Intermediate link coeff matrices that will each be determined individually
         shape = (self.mesh.Nz, self.mesh.Nx)
@@ -200,11 +180,9 @@ class MomentumAssembler:
         aN = Dn + np.maximum(Fn, 0)
         a0 = fields.rho * (self.mesh.dx * self.mesh.dz) / dt
 
-
         # This must happen before zero-out block because central coeff. needs the boundary cell diffusion contribution
         # it is then zero-ed out because there is no neighboring cell on the boundary
         aP: np.ndarray = aE + aW + aN + aS + (Fe - Fw + Fs - Fn) + a0
-
 
         ## Zero-out non neighbors   ~  should handle corners automatically too!
         aE[:, -1] = 0.0         # no right cell neighbors on last col
@@ -212,30 +190,25 @@ class MomentumAssembler:
         aN[0, :] = 0.0          # no top cell neighbors on top row
         aS[-1, :] = 0.0         # no bottom cell neighbors on bottom row
 
-
         # RHS
         V = self.mesh.dx * self.mesh.dz * 1
         
         # transient contribution from a0 * w at time step
-        self.bw += a0 * fields.w_old - V * fields.dpdz
+        bw += a0 * fields.w_old - V * fields.dpdz
 
         # transposed momentum from u velocity
         dudz_x = 0.5 * (fields.dudz[:, :-1] + fields.dudz[:, 1:])
         tau_cross = dudz_x * mu_q
-        diffusion_stress = np.zeros_like(self.bw)
+        diffusion_stress = np.zeros_like(bw)
         diffusion_stress[:, 1:] -= tau_cross * self.mesh.dz # west contribuion
         diffusion_stress[:, :-1] += tau_cross * self.mesh.dz # east contribution
 
         # source momentum from mushy zone
-        source_momentum_sink = np.zeros_like(self.bw)
+        source_momentum_sink = np.zeros_like(bw)
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w)
 
-        # # source surface tension from marangoni effect
-        # surface_tension = np.zeros_like(self.bw)
-        # surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
-
-        self.bw += diffusion_stress + source_momentum_sink
-        self.bw = self.bw.ravel()
+        bw += diffusion_stress + source_momentum_sink
+        bw = bw.ravel()
 
         # print(f"aS: {aS}")
         aP = aP.ravel()
@@ -246,24 +219,11 @@ class MomentumAssembler:
 
         Nx = self.mesh.Nx
         Nz = self.mesh.Nz
-        k = np.arange(Nx * Nz)
+
+        Aw = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
 
 
-        # Arrays of indices that have the named neighbors
-        east  = k[k % Nx != Nx - 1]     # list of cells (k index) that have an east neighbor
-        west  = k[k % Nx != 0]
-        north = k[k >= Nx]
-        south = k[k < Nx * Nz - Nx]
-
-        # print(f"Aw shape = {self.Aw.shape}")
-        # print(f"{aE}")
-        self.Aw[k, k]               = aP
-        self.Aw[east, east+1]       = -aE[east]
-        self.Aw[west, west-1]       = -aW[west]
-        self.Aw[north, north-Nx]    = -aN[north]
-        self.Aw[south, south+Nx]    = -aS[south]
-
-        return self.Aw, self.bw, aP
+        return Aw, bw, aP
 
     def _source_momentum(self, e_vector, u_vector):
         # source momentum sink from the mushy zone
@@ -279,3 +239,38 @@ class MomentumAssembler:
         dTdx_topRow = dTdx_all[0, :]
 
         return -dgamma_dT * dTdx_topRow * self.mesh.dx
+
+    def _build_sparse_matrix(self, aE, aW, aS, aN, aP, Nx, Nz):
+        N = Nx * Nz
+        k = np.arange(N)
+        east  = k[k % Nx != Nx - 1]
+        west  = k[k % Nx != 0]
+        north = k[k >= Nx]
+        south = k[k < N - Nx]
+
+        rows = [
+            k,
+            east,
+            west,
+            north,
+            south
+        ]
+
+        cols = [
+            k,
+            east+1,
+            west-1,
+            north-Nx,
+            south+Nx
+        ]
+
+        values = [
+            aP,
+            aE,
+            aW,
+            aN,
+            aS
+        ]
+
+        A = coo_array((values, (rows, cols)), shape=(Nz, Nx))
+        return A
