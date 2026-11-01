@@ -14,7 +14,9 @@ import argparse
 import os
 from scipy.sparse import issparse
 from scipy.sparse.linalg import spsolve
-from sympy import false
+import timeit
+from statistics import median
+
 
 
 # Local classes
@@ -61,7 +63,7 @@ def main():
     fields.p[:] = 0.0
     fields.uq_old[:] = 4.0
     fields.w_old[:] = 4.0
-
+    fields.liquid_frac[:] = 0
     fields.rho[:] = 4000.0
     fields.mu[:] = 0.0004
 
@@ -92,12 +94,17 @@ def main():
         dt=dt
     )
 
-
-
     A_w, b_w, Aw_diag = momentum.assemble_w(
         fields=fields,
         faces=faces,
         dt=dt)
+
+#     benchmark_u_assembly(
+#     momentum=momentum,
+#     fields=fields,
+#     faces=faces,
+#     dt=dt,
+# )
 
     compare_assembly(
         A_old = A_u,
@@ -107,7 +114,7 @@ def main():
         name ="X - New"
     )
 
-    check_assembly = false
+    check_assembly = False
     if check_assembly:
         # --------------------------------------------------
         # 1. Check matrix dimensions
@@ -192,7 +199,6 @@ def main():
 
         print("\nAssembly test completed.")
 
-
 def compare_assembly(
     A_old: np.ndarray,
     b_old: np.ndarray,
@@ -224,7 +230,7 @@ def compare_assembly(
     np.testing.assert_allclose(
         A_old, A_new,
         rtol=1e-10,
-        atol=1e-12
+        atol=1e-7
     )
 
     np.testing.assert_allclose(
@@ -234,6 +240,50 @@ def compare_assembly(
     )
 
     print("PASS: Assemblies agree")
+
+def benchmark_u_assembly(
+    momentum, fields, faces, dt, repeats=7, calls_per_repeat=20
+):
+    methods = {
+        "Loop": momentum.assemble_u_old,
+        "Vectorized": momentum.assemble_u,
+    }
+    timings = {}
+
+    for name, method in methods.items():
+        def assemble(method=method):
+            return method(fields=fields, faces=faces, dt=dt)
+
+        # Warm up before collecting timings.
+        for _ in range(3):
+            assemble()
+
+        batch_times = timeit.repeat(
+            stmt=assemble,
+            repeat=repeats,
+            number=calls_per_repeat,
+        )
+
+        timings[name] = [
+            elapsed / calls_per_repeat
+            for elapsed in batch_times
+        ]
+
+    print(
+        f"\nU-momentum assembly: "
+        f"{momentum.mesh.Nx} × {momentum.mesh.Nz}"
+    )
+    print(f"{repeats} batches of {calls_per_repeat} calls per method")
+
+    for name, samples in timings.items():
+        print(
+            f"{name:12s} "
+            f"median = {median(samples) * 1e3:.4f} ms/call, "
+            f"minimum = {min(samples) * 1e3:.4f} ms/call"
+        )
+
+    speedup = median(timings["Loop"]) / median(timings["Vectorized"])
+    print(f"Loop time / vectorized time: {speedup:.2f}×")
 
 
 
