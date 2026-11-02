@@ -1,12 +1,10 @@
-from encodings.punycode import T
-
 import numpy as np
-from dataclasses import dataclass, field
 import numpy.typing as npt
-
+from dataclasses import dataclass, field
 from core.mesh import Mesh
-
 FloatArray = npt.NDArray[np.float64]
+
+
 
 
 

@@ -23,6 +23,7 @@ from core.fields import FlowField, FaceField
 from core.settings import SolveSettings, PlotSettings
 from discretization.momentum import MomentumAssembler
 
+from postprocessing.closed_box_plot import plot_closed_box
 from solver.simple import SIMPLEcfd
 
 
@@ -282,8 +283,9 @@ def benchmark_u_assembly(
 
 
 def test_simple_closed_box(perturb_pressure=False):
-    Nx, Nz = 8, 12
+    Nx, Nz = 50, 50
     dt = 0.01
+    max_time = 5 #[s]
 
     mesh = Mesh(
         Lx=1.0, Ly=1.0, Lz=1.0,
@@ -303,7 +305,7 @@ def test_simple_closed_box(perturb_pressure=False):
     ):
         getattr(fields, name).fill(0.0)
 
-    fields.rho.fill(1.0)
+    fields.rho.fill(1)
     fields.mu.fill(0.01)
     fields.liquid_frac.fill(1.0)
 
@@ -329,11 +331,34 @@ def test_simple_closed_box(perturb_pressure=False):
     )
 
     # Fail immediately on singular pressure systems or invalid arithmetic.
+    number_of_time_steps = int(np.round(max_time/dt))
+    step=0
     with warnings.catch_warnings():
         warnings.simplefilter("error", MatrixRankWarning)
 
         with np.errstate(over="raise", divide="raise", invalid="raise"):
-            solver.run(maxIters=50)
+            print(f"Steps to run: {number_of_time_steps}")
+            print(f"Total number of cells: {Nx*Nz}")
+            for step in range(number_of_time_steps):
+                # Previous physical-time solution, fixed during the SIMPLE iterations.
+                fields.uq_old[:] = fields.uq
+                fields.w_old[:] = fields.w
+
+                solver.run(maxIters=200)
+                time = (step + 1) * dt
+                print(f"Step completed: {step}")
+                step += 1
+
+    case = "pressure_perturbation" if perturb_pressure else "rest"
+
+    fig = plot_closed_box(
+        mesh,
+        fields,
+        faces,
+        output_path=f"results/closed_box_{case}.png",
+        show=True,
+    )
+
 
     for name, array in (
         ("uq", fields.uq),
@@ -372,5 +397,5 @@ def test_simple_closed_box(perturb_pressure=False):
 
 if __name__ == "__main__":
     test_simple_closed_box()
-    test_simple_closed_box(True)
+    # test_simple_closed_box(True)
     

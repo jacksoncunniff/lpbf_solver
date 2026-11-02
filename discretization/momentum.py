@@ -24,6 +24,9 @@ class MomentumAssembler:
         self.N = mesh.Nx * mesh.Nz
 
     def assemble_u(self, fields: FlowField, faces: FaceField, dt):
+
+        lid_case = True
+
         # Reset coeff matrix that is being returned
         # Au = np.zeros((self.N, self.N), dtype=np.float64)
         bu = np.zeros((self.mesh.Nz, self.mesh.Nx))
@@ -63,8 +66,16 @@ class MomentumAssembler:
         De[:, -1] = 4 * self.mesh.dz / self.mesh.dx * fields.mu[:, -1]          #De for right
         Dw[:, 0] = 4 * self.mesh.dz / self.mesh.dx * fields.mu[:, 0]            #Dw for left
         Ds[-1, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[-1, :]      #Ds for bottom row
-        Dn[0, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[0, :]        #Dn for top surface
         # Dn[0, :] = 0    # contributes 0 with prescribed 
+
+        if lid_case:
+            U_lid = 10
+             # [m/s]
+            D_lid = 2.0 * fields.mu[0, :] * self.mesh.dx / self.mesh.dz
+            Dn[0, :] += D_lid 
+            bu[0, :] += D_lid * U_lid
+        else:
+            Dn[0, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[0, :]        #Dn for top surface
 
         ## Construct links with upwinding
         aE = De + np.maximum(-Fe, 0)
@@ -100,10 +111,13 @@ class MomentumAssembler:
         # source momentum from mushy zone
         source_momentum_sink = np.zeros_like(bu)
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.uq_old) * V
+        source_momentum_sink[:] = 0
 
         # # source surface tension from marangoni effect
         surface_tension = np.zeros_like(bu)
         surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
+        surface_tension[:] = 0
+
 
         bu += diffusion_stress + source_momentum_sink + surface_tension
         bu = bu.ravel()
@@ -160,10 +174,10 @@ class MomentumAssembler:
         mu_q = 0.5 * (fields.mu[:, :-1] + fields.mu[:, 1:])
         mu_z = 0.5 * (fields.mu[:-1, :] + fields.mu[1:, :])
 
-        De[:, :-1]  = 2 * self.mesh.dz / self.mesh.dx * mu_q
-        Dw[:, 1:]   = 2 * self.mesh.dz / self.mesh.dx * mu_q
-        Ds[:-1, :]  = 4 * self.mesh.dx / self.mesh.dz * mu_z
-        Dn[1:, :]   = 4 * self.mesh.dx / self.mesh.dz * mu_z        
+        De[:, :-1]  = self.mesh.dz / self.mesh.dx * mu_q
+        Dw[:, 1:]   = self.mesh.dz / self.mesh.dx * mu_q
+        Ds[:-1, :]  = 2 * self.mesh.dx / self.mesh.dz * mu_z
+        Dn[1:, :]   = 2 * self.mesh.dx / self.mesh.dz * mu_z        
 
         # Boundary diffusion
         De[:, -1] = self.mesh.dz / self.mesh.dx * fields.mu[:, -1] * 2          #De for right
