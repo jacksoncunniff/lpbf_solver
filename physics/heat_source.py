@@ -20,7 +20,7 @@ class LaserSource:
     # Laser Properties
     P: float                # laser power [W]
     A: float
-    Cp: float               # Powder
+    Cp: np.ndarray              # Powder
     a: float                # half of laser diameter in Y
     b: float                # half of laser diameter in X
     c: float                # laser penetration depth

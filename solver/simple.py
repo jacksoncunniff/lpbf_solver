@@ -6,8 +6,9 @@ from core.settings import SolveSettings
 
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
-from core.boundary_conditions import BoundaryConditions
+from core.boundary_conditions import BoundaryCondition
 
+from discretization.energy import EnergyModule
 from discretization.momentum import MomentumAssembler
 from discretization.pressure import assemble_pressure_corrector, face_velocity_interpolation, scalar_pressure_gradient
 # from discretization.pressure import pressure_correction
@@ -210,6 +211,8 @@ class SIMPLEcfd:
         ).reshape(shape)
 
         return Ru, Rw
+
+
 
     def run(self, maxIters):
         """Executes SIMPLE loop at one time step

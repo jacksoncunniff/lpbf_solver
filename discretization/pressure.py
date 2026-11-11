@@ -1,14 +1,9 @@
+import numpy as np
 from typing import Tuple
-from numpy.ctypeslib import as_array
 from scipy.sparse import coo_array
 
-import numpy as np
-from dataclasses import dataclass, field
-
-from core.fields import FaceField, FlowField
 from core.mesh import Mesh
-
-
+from core.fields import FaceField, FlowField
 
 def face_velocity_interpolation(
         fields: FlowField,

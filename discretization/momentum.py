@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.sparse import coo_array
 
-from core.boundary_conditions import BoundaryConditions
+from core.boundary_conditions import BoundaryCondition
 from core.fields import FaceField, FlowField
 from core.mesh import Mesh
 from core.material import Material
@@ -17,7 +17,7 @@ class MomentumAssembler:
     Uses cell-centered velocity fields and face-centered
     mass fluxes on a structured collocated FVM mesh.
     """
-    def __init__(self, mesh: Mesh, material: Material, boundary_conditions: Optional[BoundaryConditions] = None):
+    def __init__(self, mesh: Mesh, material: Material, boundary_conditions: Optional[BoundaryCondition] = None):
         self.mesh = mesh
         self.material = material
         self.bc = boundary_conditions
