@@ -58,21 +58,21 @@ class TemperatureModule:
     def solve_energy(self):
 
         shape = (self.Nz, self.Nx)
-        A_T, b_T, aP_T = self.assembler.assemble_temperature(
+        A_T, b_T, aP_T, aP, aE, aW, aN, aS, a0 = self.assembler.assemble_temperature(
             self.mesh,
             self.fields,
             self.faces,
             self.mesh.dt
         )
 
-        T = spsolve(A_T, b_T)
-        self.fields.T[:] = T.reshape(shape)
+        # T = spsolve(A_T, b_T)
+        # self.fields.T[:] = T.reshape(shape)
 
         # TO DO: IMPLEMENT ADI/THOMAS ALGORITHMS TO REUSE HERE
-        _ADI()
+        self._ADI(aP, aE, aW, aN, aS, a0, b_T)
 
 
-    def _ADI(self, aN: np.ndarray, aS: np.ndarray, aW: np.ndarray, aN: np.ndarray, b: np.ndarray) -> np.ndarray:
+    def _ADI(self, aP, aE, aW, aN, aS, a0, rhs: np.ndarray) -> np.ndarray:
         """Implementation of alternating-direction implicit method that will sweep row by row across the computational
         domain to call the _TDMA algorithm on a simplified 1D problem.
 
@@ -83,13 +83,69 @@ class TemperatureModule:
             b (np.ndarray): _description_
 
         Returns:
-            np.ndarray: _description_
+            T (np.ndarray): whole temperature field solved for the provided matrices
         """
+        T = self.fields.T.copy()
+        Nz = self.mesh.Nz
+        Nx = self.mesh.Nx
+
+        j = 0
+        # start with top row to bottom row
+        #iterating across row so aW is lower diagonal, aE is upper diagonal
+        for j in range(Nz):
+            
+            # to prevent indexing errors
+            if j==0:
+                aN_rhs = 0
+            else:
+                aN_rhs = aN * T[j-1, :]
+
+            if j==Nz-1:
+                aS_rhs = 0
+            else:
+                aS_rhs = aS * T[j+1, :]
+
+            a = -aW[j, :].copy()
+            b = aP[j, :].copy()
+            c = -aE[j, :].copy()
+            d = rhs[j, :].copy() + aN_rhs + aS_rhs
+            T[j, :] = self._TDMA(a, b, c, d)
 
 
+        i = 0
+        # start with left column and sweep to right column
+        #iterating across row so aW is lower diagonal, aE is upper diagonal
+        for i in range(Nx):
+            
+            # to prevent indexing errors
+            if i==0:
+                aW_rhs = 0
+            else:
+                aW_rhs = aW * T[j-1, :]
+
+            if i==Nx-1:
+                aE_rhs = 0
+            else:
+                aE_rhs = aE * T[j+1, :]
+
+            a = -aN[j, :].copy()
+            b = aP[j, :].copy()
+            c = -aS[j, :].copy()
+            d = rhs[j, :].copy() + aW_rhs + aE_rhs
+            T[j, :] = self._TDMA(a, b, c, d)
 
 
-        return np.ndarray(1)
+        residual = rhs.copy() - aP * T
+
+        residual[:, :-1] += aE[:, :-1] * T[:, 1:]
+        residual[:, 1:]  += aW[:, 1:]  * T[:, :-1]
+
+        residual[1:, :]  += aN[1:, :]  * T[:-1, :]
+        residual[:-1, :] += aS[:-1, :] * T[1:, :]
+        
+        print(f"ADI Residual = {residual.norm.max}")
+
+        return T
 
     def _TDMA(self, a, b, c, d):
         """Tridiagonal Matrix Algorithm solve for a single row of the computational mesh. This algorithm requires equal

@@ -98,17 +98,18 @@ class EnergyAssembler:
         aS[-1, :] = 0.0         # no bottom cell neighbors on bottom row
 
         # RHS
+        b_T += a0 * fields.T
         b_T = b_T.ravel()
-        aP = aP.ravel()
-        aE = aE.ravel()
-        aW = aW.ravel()
-        aS = aS.ravel()
-        aN = aN.ravel()
+        aP_ = aP.ravel()
+        aE_ = aE.ravel()
+        aW_ = aW.ravel()
+        aS_ = aS.ravel()
+        aN_ = aN.ravel()
 
         Nx = mesh.Nx
         Nz = mesh.Nz
-        A_T = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
-        return A_T, b_T, aP_T
+        A_T = self._build_sparse_matrix(aE_, aW_, aS_, aN_, aP_, Nx, Nz)
+        return A_T, b_T, aP_T, aP, aE, aW, aN, aS, a0
 
 
     def _build_sparse_matrix(self, aE, aW, aS, aN, aP, Nx, Nz):
