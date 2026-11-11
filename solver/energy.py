@@ -2,7 +2,6 @@
 import numpy as np
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags_array
-from sympy import true
 
 from core import material
 from core.settings import SolveSettings
@@ -40,12 +39,12 @@ class TemperatureModule:
 
     def laser_update(self, current_t):
         laser = LaserSource(
-                250,
-                1,
-                self.fields.cp,
-                1,
-                1,
-                1,
+                P = 250,
+                A = 1,
+                Cp = self.fields.cp,
+                a = 0.1,
+                b = 0.1,
+                c = 0.02,
                 α = 1,
                 V = 1,
                 t_prime = 1,

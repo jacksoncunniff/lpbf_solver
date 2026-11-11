@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 from dataclasses import dataclass, field
+
 from core.mesh import Mesh
 from physics.material_properties import *
 
@@ -60,11 +61,12 @@ class FlowField:
         self.uq: np.ndarray = np.zeros(self.two_dim)
         self.w: np.ndarray = np.zeros(self.two_dim)
         self.p: np.ndarray = np.zeros(self.two_dim)
-        self.T: np.ndarray = np.zeros(self.two_dim)
+        self.T: np.ndarray = np.ones(self.two_dim) * 303
         self.mu: np.ndarray = np.zeros(self.two_dim)
-        self.cp: np.ndarray = np.zeros(self.two_dim)
-        self.k: np.ndarray = np.zeros(self.two_dim)
-        self.rho: np.ndarray = np.zeros(self.two_dim)
+        self.cp: np.ndarray = Cp_ti(self.T)
+        self.k: np.ndarray = (1-0.45)**4 * K_ti(self.T)
+        self.rho: np.ndarray = (1-0.45) * density_ti(self.T)
+
         self.liquid_frac: np.ndarray = np.zeros(self.two_dim)
         self.dgamma_dT: np.ndarray = np.zeros(self.Nq)
                                     # this will be a 1 x Nx array that contains the updated surface tension value 
@@ -171,10 +173,14 @@ class FlowField:
         pass
 
     def update_material_properties(self):
-        T = self.T.copy()
-        self.mu = density_ti(T)
-        self.cp = Cp_ti(T)
-        self.k = K_ti(T)
+        mask = self.T > 303
+        T = self.T.copy()[mask]
+        self.mu[mask] = density_ti(T)
+        self.cp[mask] = Cp_ti(T)
+        self.k[mask] = K_ti(T)
+
+        ## adding a mask should help prevent the update of values that are initialized as powder -> only update once they convert to solid?
+        ## revisit this TODO
 
 
 

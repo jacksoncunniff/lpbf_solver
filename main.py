@@ -51,9 +51,9 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh, m
     depth = -1
     while not steady_state:
 
-        update_material_properties()
+        fields.update_material_properties()
         energy.laser_update(current_t = t)
-        update_material_properties()
+        fields.update_material_properties()
         simpleSolve.run(50)
         energy.solve_energy()
         depthNew = energy.compute_depth()

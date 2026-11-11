@@ -14,7 +14,6 @@ class BoundaryCondition:
     
     pass
 
-
 class DirichletCondition:
     
     pass

@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.sparse import coo_array
-from typing import Literal, Optional
 
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
