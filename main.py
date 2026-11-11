@@ -3,20 +3,15 @@ import numpy as np
 import os
 import argparse
 
-from sympy import solveset
-
 
 # Local classes
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
 from core.material import Material
-from core.boundary_conditions import BoundaryConditions
+from core.boundary_conditions import BoundaryCondition
 from core.settings import SolveSettings, PlotSettings
 
-from discretization.momentum import MomentumAssembler
-from discretization.pressure import pressure_correction
-from discretization.interpolation import face_fluxes
-
+from solver.energy import TemperatureModule
 from solver.simple import SIMPLEcfd
 
 from physics.heat_source import LaserSource
@@ -27,7 +22,6 @@ def setup():
     parser = argparse.ArgumentParser(
 
     )
-
     parser.add_argument("--nx", type=int, default=100)
     parser.add_argument("--nz", type=int, default=50)
     parser.add_argument("--dt", type=float, default=1e-6)
@@ -45,18 +39,32 @@ def setup():
 
 
 def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh, material: Material):
-
     Nq = mesh.Nx
     Nz = mesh.Nz
     fields = FlowField(mesh, Nq, Nz)
     faces = FaceField(mesh)
-
+    energy = TemperatureModule(solveSettings, fields, faces, mesh, mesh.dt, material)
     simpleSolve =  SIMPLEcfd(solveSettings, fields, faces, mesh, mesh.dt, material)    
-    
-    simpleSolve.run()
 
+    t = 0.0
+    steady_state = False
+    depth = -1
+    while not steady_state:
 
+        update_material_properties()
+        energy.laser_update(current_t = t)
+        update_material_properties()
+        simpleSolve.run(50)
+        energy.solve_energy()
+        depthNew = energy.compute_depth()
+        t += mesh.dt
+
+        if depthNew == depth:
+            break
+        else:
+            depth = depthNew
 
 
 if __name__ == "__main__":
     main()
+    plot_fields()
