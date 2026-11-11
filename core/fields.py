@@ -2,6 +2,8 @@ import numpy as np
 import numpy.typing as npt
 from dataclasses import dataclass, field
 from core.mesh import Mesh
+from physics.material_properties import *
+
 FloatArray = npt.NDArray[np.float64]
 
 
@@ -167,6 +169,13 @@ class FlowField:
         self.dudx[:, 0] = (-3 * self.uq[:, 0] + 4 * self.uq[:, 1] - self.uq[:, 2]) / (2 * self.mesh.dx)
         self.dudx[:, -1] = (-3 * self.uq[:, -1] + 4 * self.uq[:, -2] - self.uq[:, -3]) / (2 * self.mesh.dx)
         pass
+
+    def update_material_properties(self):
+        T = self.T.copy()
+        self.mu = density_ti(T)
+        self.cp = Cp_ti(T)
+        self.k = K_ti(T)
+
 
 
 @dataclass
