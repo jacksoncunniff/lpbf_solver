@@ -1,10 +1,9 @@
 # packages
-import numpy as np
 import os
 import argparse
 
-
 # Local classes
+from core import mesh
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
 from core.material import Material
@@ -14,9 +13,7 @@ from core.settings import SolveSettings, PlotSettings
 from solver.energy import TemperatureModule
 from solver.simple import SIMPLEcfd
 
-from physics.heat_source import LaserSource
-from physics.material_properties import update_material_properties
-
+from postprocessing.visualize import *
 
 def setup():
     parser = argparse.ArgumentParser(
@@ -31,7 +28,7 @@ def setup():
 
     mesh: Mesh = Mesh(1.0, 1.0, 1.0, args.nx, 1, args.nz, args.dt)
     material = Material()
-    solverSettings = SolveSettings()
+    solverSettings = SolveSettings(0.25, 50)
     plotSettings = PlotSettings()
 
     return solverSettings, plotSettings, mesh, material
@@ -50,7 +47,7 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh, m
     steady_state = False
     depth = -1
     while not steady_state:
-
+        print(f"Entered main loop, t = {t}")
         fields.update_material_properties()
         energy.laser_update(current_t = t)
         fields.update_material_properties()
@@ -60,11 +57,20 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh, m
         t += mesh.dt
 
         if depthNew == depth:
-            break
+            steady_state = True
         else:
             depth = depthNew
 
 
 if __name__ == "__main__":
-    main()
-    plot_fields()
+    
+    
+    solverSettings, plotSettings, mesh, material = setup()
+
+    main(
+        solveSettings= solverSettings,
+        plotSettings= plotSettings,
+        mesh = mesh,
+        material = material
+    )
+    # plot_fields()

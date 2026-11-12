@@ -24,7 +24,8 @@ class LaserSource:
     a: float                # half of laser diameter in Y
     b: float                # half of laser diameter in X
     c: float                # laser penetration depth
-    α: float                # thermal diffusivity of powder bed
+    rho: np.ndarray
+    k: np.ndarray
     V: float                # speed of laser [m/s]
     t_prime: float          # some kind of ref time?
     delta_t: float          # time increment since previous update
@@ -46,7 +47,7 @@ class LaserSource:
         """
         P = self.P
         A = self.A
-        α = self.α
+        alpha = self.k / (self.rho * self.Cp)
         V = self.V
         C = self.Cp
         a = self.a
@@ -54,8 +55,8 @@ class LaserSource:
         c = self.c
 
         X1 = (3*np.sqrt(3.0)*P*A)/(rho * C*np.pi*np.sqrt(np.pi))
-        X2 = np.exp(-3*((x-V*current_time)**2/(12*α*dt+a**2) + y**2/(12*α*dt+b**2) + z**2/(12*α*dt+c**2))) 
-        X3 = np.sqrt(12*α*dt + a**2) * np.sqrt(12*α*dt + b**2) * np.sqrt(12*α*dt + c**2)
+        X2 = np.exp(-3*((x-V*current_time)**2/(12*alpha*dt+a**2) + y**2/(12*alpha*dt+b**2) + z**2/(12*alpha*dt+c**2))) 
+        X3 = np.sqrt(12*alpha*dt + a**2) * np.sqrt(12*alpha*dt + b**2) * np.sqrt(12*alpha*dt + c**2)
 
         return X1*X2/X3*dt
 
@@ -67,16 +68,19 @@ class LaserSource:
         """
 
         rho_field = fields.rho
-        x = mesh.x
-        z = mesh.z
+        x = mesh.x[None, :]
+        z = mesh.z[:, None]
+        y = mesh.y.max()/2
 
 
         dT_fields = self._laser_module(
                                     x=x,
-                                    y=0, 
+                                    y=y, 
                                     z=z, 
                                     current_time=current_time, 
                                     dt=delta_time, 
                                     rho=rho_field
                                     )
+
+        # print(f"dT_fields: {dT_fields.shape()}")
         return dT_fields

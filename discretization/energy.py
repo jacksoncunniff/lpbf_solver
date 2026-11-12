@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import coo_array
+from typing import Literal, Optional
 
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
@@ -32,12 +33,30 @@ class EnergyAssembler:
         a0 = np.empty(shape)
 
         # Specific Heat Interpolation
+        cp_e = np.zeros_like(fields.cp)
+        cp_w = np.zeros_like(fields.cp) 
+        cp_n = np.zeros_like(fields.cp)
+        cp_s = np.zeros_like(fields.cp) 
         cp_q = 0.5 * (fields.cp[:, :-1] + fields.cp[:, 1:])
         cp_z = 0.5 * (fields.cp[:-1, :] + fields.cp[1:, :])
 
+        cp_e[:, :-1] = cp_q
+        cp_w[:, 1:] = cp_q
+        cp_n[1:, :] = cp_z
+        cp_s[:-1, :] = cp_z
+
         # Thermal Conductivity Interpolation
+        k_e = np.zeros_like(fields.k)
+        k_w = np.zeros_like(fields.k)
+        k_n = np.zeros_like(fields.k)
+        k_s = np.zeros_like(fields.k) 
         k_q = 0.5 * (fields.k[:, :-1] + fields.k[:, 1:])
         k_z = 0.5 * (fields.k[:-1, :] + fields.k[1:, :])
+
+        k_e[:, :-1] = k_q
+        k_w[:, 1:] = k_q
+        k_n[1:, :] = k_z
+        k_s[:-1, :] = k_z
 
         # Diffusion matrices
         De = np.zeros(shape)
@@ -46,10 +65,10 @@ class EnergyAssembler:
         Dn = np.zeros(shape)
 
         # Flux matrices
-        Fe = cp_q * faces.flux_q[:, 1:]
-        Fw = cp_q * faces.flux_q[:, :-1]
-        Fs = cp_z * faces.flux_w[1:, :]
-        Fn = cp_z * faces.flux_w[1:, :]
+        Fe = cp_e * faces.flux_q[:, 1:]
+        Fw = cp_w * faces.flux_q[:, :-1]
+        Fs = cp_s * faces.flux_w[1:, :]
+        Fn = cp_n * faces.flux_w[1:, :]
 
         # Calculate intermediate values
         De[:, :-1]  = k_q * dz / dx
@@ -70,7 +89,7 @@ class EnergyAssembler:
         # R_eff is Dn but with conductive and convection between cell and to ambient condition = 300K
         R_eff = np.zeros_like(b_T)
         R_eff[0, :] = dx / (1.0/h + (dz/2)/fields.k[0, :])
-        b_T[0, :]   = R_eff * 300 # convection heat loss
+        b_T[0, :]   = R_eff[0, :] * 300 # convection heat loss
 
         # Grid Peclet Numbers
         Pe = Fe / De
@@ -83,10 +102,10 @@ class EnergyAssembler:
             # can be used for future methods besides upwind
             return 1
 
-        aE = De * scheme() + max(-Fe, 0)
-        aW = Dw * scheme() + max(-Fw, 0)
-        aS = Ds * scheme() + max(-Fs, 0)
-        aN = Dn * scheme() + max(-Fn, 0)
+        aE = De * scheme() + np.maximum(-Fe, 0)
+        aW = Dw * scheme() + np.maximum(-Fw, 0)
+        aS = Ds * scheme() + np.maximum(-Fs, 0)
+        aN = Dn * scheme() + np.maximum(-Fn, 0)
         a0 = fields.rho * fields.cp * (dx * dz) / dt
         aP_T: np.ndarray = aE + aW + aN + aS + (Fe - Fw + Fs - Fn) + a0 + R_eff
 
@@ -98,7 +117,7 @@ class EnergyAssembler:
 
         # RHS
         b_T += a0 * fields.T
-        b_T = b_T.ravel()
+        b_T_ = b_T.ravel()
         aP_ = aP.ravel()
         aE_ = aE.ravel()
         aW_ = aW.ravel()

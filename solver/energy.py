@@ -45,8 +45,9 @@ class TemperatureModule:
                 a = 0.1,
                 b = 0.1,
                 c = 0.02,
-                α = 1,
-                V = 1,
+                rho=self.fields.rho,
+                k=self.fields.k,
+                V = 1.5,
                 t_prime = 1,
                 delta_t = 1
         )
@@ -67,7 +68,6 @@ class TemperatureModule:
         # T = spsolve(A_T, b_T)
         # self.fields.T[:] = T.reshape(shape)
 
-        # TO DO: IMPLEMENT ADI/THOMAS ALGORITHMS TO REUSE HERE
         self._ADI(aP, aE, aW, aN, aS, a0, b_T)
 
 
@@ -97,17 +97,18 @@ class TemperatureModule:
             if j==0:
                 aN_rhs = 0
             else:
-                aN_rhs = aN * T[j-1, :]
+                aN_rhs = aN[j, :] * T[j-1, :]
 
             if j==Nz-1:
                 aS_rhs = 0
             else:
-                aS_rhs = aS * T[j+1, :]
+                aS_rhs = aS[j, :] * T[j+1, :]
 
             a = -aW[j, :].copy()
             b = aP[j, :].copy()
             c = -aE[j, :].copy()
             d = rhs[j, :].copy() + aN_rhs + aS_rhs
+            # print("Inputs:", a.shape, b.shape, c.shape, d.shape)
             T[j, :] = self._TDMA(a, b, c, d)
 
 
@@ -120,17 +121,17 @@ class TemperatureModule:
             if i==0:
                 aW_rhs = 0
             else:
-                aW_rhs = aW * T[j-1, :]
+                aW_rhs = aW[:, i] * T[:, i-1]
 
             if i==Nx-1:
                 aE_rhs = 0
             else:
-                aE_rhs = aE * T[j+1, :]
+                aE_rhs = aE[:, i] * T[:, i+1]
 
-            a = -aN[j, :].copy()
-            b = aP[j, :].copy()
-            c = -aS[j, :].copy()
-            d = rhs[j, :].copy() + aW_rhs + aE_rhs
+            a = -aN[:, i].copy()
+            b = aP[:, i].copy()
+            c = -aS[:, i].copy()
+            d = rhs[:, i].copy() + aW_rhs + aE_rhs
             T[j, :] = self._TDMA(a, b, c, d)
 
 
@@ -142,7 +143,7 @@ class TemperatureModule:
         residual[1:, :]  += aN[1:, :]  * T[:-1, :]
         residual[:-1, :] += aS[:-1, :] * T[1:, :]
         
-        print(f"ADI Residual = {residual.norm.max}")
+        # print(f"ADI Residual = {residual.max}")
 
         return T
 
