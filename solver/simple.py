@@ -43,10 +43,29 @@ class SIMPLEcfd:
         self.settings = settings
         self.assembler = MomentumAssembler(self.mesh)
 
+    def _check_system(self, name, A, rhs):
+        A = A.tocsr()
+        diagonal = A.diagonal()
+        rhs = np.asarray(rhs).ravel()
+
+        print(f"\n{name}")
+        print("Matrix finite:", np.all(np.isfinite(A.data)))
+        print("RHS finite:", np.all(np.isfinite(rhs)))
+        print("Minimum diagonal:", np.min(diagonal))
+        print("Zero diagonals:", np.count_nonzero(diagonal == 0))
+        print("Empty rows:", np.count_nonzero(np.diff(A.indptr) == 0))
+
+        assert np.all(np.isfinite(A.data))
+        assert np.all(np.isfinite(rhs))
+        assert np.all(diagonal != 0)    
+
     def _solve_momentum(self):
         shape = (self.Nz, self.Nx)
         Au, bu, aPu = self.assembler.assemble_u(self.fields, self.faces, self.dt)
         Aw, bw, aPw = self.assembler.assemble_w(self.fields, self.faces, self.dt)
+
+        # self._check_system("uq-star", Au, bu)
+        # self._check_system("w-star", Aw, bw)
 
         uq_star = spsolve(Au, bu)
         w_star = spsolve(Aw, bw)
@@ -143,7 +162,7 @@ class SIMPLEcfd:
 
         pass
 
-    def _check_convergence(self,criteria = 1e-6, iteration = 0) -> bool:
+    def _check_convergence(self,criteria = 1e-4, iteration = 0) -> bool:
     
         if iteration < 3:
             return False
@@ -172,6 +191,8 @@ class SIMPLEcfd:
         momentum_errors = max(Ru_max/momentum_scaling, Rw_max/momentum_scaling)
         continuity_errors = continuity_max_norm / (V*rho_ref) * L_ref / u_ref
         errors = np.array([momentum_errors, continuity_errors])
+
+        # print(f"SIMPLE Iter Convergence: {iteration} | {errors.max()}")
 
         if np.all(errors < criteria):
             return bool(np.isfinite(errors).all() and np.all(errors < criteria))
@@ -238,6 +259,7 @@ class SIMPLEcfd:
             iteration += 1
             if iteration > maxIters:
                 break
+
 
 
 

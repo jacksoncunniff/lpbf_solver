@@ -143,10 +143,10 @@ class FlowField:
 
     def calculate_liquid_frac(self):
 
-        Ts = 900    # TODO - UPDATE PROPERTIES & OR REFERENCE MATERIALS SPECIFICALLY IN SEP CLASS
-        Tl = 1500
+        Ts = 1878
+        Tl = 1923
 
-        mask = self.T > Ts & self.T < Tl
+        mask = (self.T > Ts) & (self.T < Tl)
         self.liquid_frac[self.T <= Ts] = 0
         self.liquid_frac[self.T >= Tl] = 1
 

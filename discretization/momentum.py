@@ -25,7 +25,7 @@ class MomentumAssembler:
 
     def assemble_u(self, fields: FlowField, faces: FaceField, dt):
 
-        lid_case = True
+        lid_case = False
 
         # Reset coeff matrix that is being returned
         # Au = np.zeros((self.N, self.N), dtype=np.float64)
@@ -66,16 +66,7 @@ class MomentumAssembler:
         De[:, -1] = 4 * self.mesh.dz / self.mesh.dx * fields.mu[:, -1]          #De for right
         Dw[:, 0] = 4 * self.mesh.dz / self.mesh.dx * fields.mu[:, 0]            #Dw for left
         Ds[-1, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[-1, :]      #Ds for bottom row
-        # Dn[0, :] = 0    # contributes 0 with prescribed 
-
-        if lid_case:
-            U_lid = 10
-             # [m/s]
-            D_lid = 2.0 * fields.mu[0, :] * self.mesh.dx / self.mesh.dz
-            Dn[0, :] += D_lid 
-            bu[0, :] += D_lid * U_lid
-        else:
-            Dn[0, :] = 2 * self.mesh.dx / self.mesh.dz * fields.mu[0, :]        #Dn for top surface
+        Dn[0, :] = 0
 
         ## Construct links with upwinding
         aE = De + np.maximum(-Fe, 0)
@@ -118,7 +109,8 @@ class MomentumAssembler:
 
         # # source surface tension from marangoni effect
         surface_tension = np.zeros_like(bu)
-        surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
+        surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx, fields.T)
+        # print(surface_tension[0, :])
         # surface_tension[:] = 0
 
 
@@ -135,6 +127,8 @@ class MomentumAssembler:
         Nz = self.mesh.Nz
         Au = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
         return Au, bu, aP
+
+    
 
     def assemble_w(self, fields: FlowField, faces: FaceField, dt):
         """Assembly matrix for link coefficients to solve w-momentum equation
@@ -222,6 +216,7 @@ class MomentumAssembler:
 
         # source momentum from mushy zone
         source_momentum_sink = np.zeros_like(bw)
+        fields.calculate_liquid_frac()
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w)
 
         bw += diffusion_stress + source_momentum_sink
@@ -251,14 +246,17 @@ class MomentumAssembler:
 
         return -G * (1-e_vector)**2 / (e_vector**3 + d) * u_vector
 
-    def _source_surf_tension(self, dgamma_dT: np.ndarray, dTdx_all: np.ndarray):
+    def _source_surf_tension(self, dgamma_dT: np.ndarray, dTdx_all: np.ndarray, T: np.ndarray):
 
+        T_top = T[0,:]
+        liq_mask = T_top > 1878
         dTdx_topRow = dTdx_all[0, :]
-        dgamma_dT = np.ones_like(dgamma_dT)* (-0.26 * 1e-3)
+        dgamma_dT = np.zeros_like(dgamma_dT)
+        dgamma_dT[:] = 1 * (-0.26 * 1e-3)
+        s = np.zeros_like(dTdx_topRow)
+        s[liq_mask] = -dgamma_dT[liq_mask] * dTdx_topRow[liq_mask] * self.mesh.dx
 
-
-
-        return -dgamma_dT * dTdx_topRow * self.mesh.dx
+        return s
 
     def _build_sparse_matrix(self, aE, aW, aS, aN, aP, Nx, Nz):
         N = Nx * Nz

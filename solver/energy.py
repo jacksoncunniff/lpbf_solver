@@ -37,6 +37,7 @@ class TemperatureModule:
         self.assembler = EnergyAssembler()
 
     def laser_update(self, current_t):
+        
         laser = LaserSource(
                 P = 500,                    #[W]
                 A = 0.8,                    #[1]

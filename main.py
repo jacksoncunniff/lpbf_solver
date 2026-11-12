@@ -45,22 +45,25 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
     energy = TemperatureModule(solveSettings, fields, faces, mesh, mesh.dt)
     simpleSolve =  SIMPLEcfd(solveSettings, fields, faces, mesh, mesh.dt)    
 
-    t = 0.0
+    t = 0
     steady_state = False
     depth = -1
     i = 0
-    n = 3
+    n = 100
     while not steady_state:
         print(f"Entered main loop, t = {t}")
+
         fields.update_material_properties()
-        energy.laser_update(current_t = t)
+        energy.laser_update(current_t = t)        
         fields.update_material_properties()
+
         fields.calculate_temperature_gradients()
-        fields.calculate_pressure_gradients()
-        simpleSolve.run(50)
+
+        simpleSolve.run(100)
         energy.solve_energy()
+
         depthNew = energy.compute_depth()
-        print(depthNew)
+        # print(depthNew)
         t += mesh.dt
 
         # if depthNew == depth:
