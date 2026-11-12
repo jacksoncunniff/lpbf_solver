@@ -4,7 +4,6 @@ from typing import Literal, Optional
 
 from core.mesh import Mesh
 from core.fields import FlowField, FaceField
-from core.material import Material
 from core.boundary_conditions import BoundaryCondition
 
 class EnergyAssembler:
@@ -92,10 +91,10 @@ class EnergyAssembler:
         b_T[0, :]   = R_eff[0, :] * 300 # convection heat loss
 
         # Grid Peclet Numbers
-        Pe = Fe / De
-        Pw = Fw / Dw
-        Ps = Fs / Ds
-        Pn = Fn / Dn
+        # Pe = Fe / De
+        # Pw = Fw / Dw
+        # Ps = Fs / Ds
+        # Pn = Fn / Dn
 
         def scheme():
             # table 5.2 in patanakar, pg 95
@@ -127,7 +126,7 @@ class EnergyAssembler:
         Nx = mesh.Nx
         Nz = mesh.Nz
         A_T = self._build_sparse_matrix(aE_, aW_, aS_, aN_, aP_, Nx, Nz)
-        return A_T, b_T, aP_T, aP, aE, aW, aN, aS, a0
+        return A_T, b_T, aP_T, aP_T, aE, aW, aN, aS, a0
 
 
     def _build_sparse_matrix(self, aE, aW, aS, aN, aP, Nx, Nz):

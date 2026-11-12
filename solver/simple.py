@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.sparse.linalg import spsolve
 
-from core import fields, material
 from core.settings import SolveSettings
 
 from core.mesh import Mesh
@@ -26,8 +25,7 @@ class SIMPLEcfd:
                  fields: FlowField,
                  faces: FaceField,
                  mesh: Mesh,
-                 dt: float,
-                 material: material.Material
+                 dt: float
                  ):
 
         self.dx = mesh.dx
@@ -41,9 +39,9 @@ class SIMPLEcfd:
         self.mesh = mesh
         self.faces = faces
         self.dt = dt
-        self.material = material
+        # self.material = material
         self.settings = settings
-        self.assembler = MomentumAssembler(self.mesh, self.material)
+        self.assembler = MomentumAssembler(self.mesh)
 
     def _solve_momentum(self):
         shape = (self.Nz, self.Nx)

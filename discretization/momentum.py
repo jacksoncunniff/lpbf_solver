@@ -4,7 +4,7 @@ from scipy.sparse import coo_array
 from core.boundary_conditions import BoundaryCondition
 from core.fields import FaceField, FlowField
 from core.mesh import Mesh
-from core.material import Material
+# from core.material import Material
 from typing import Literal, Optional
 MomentumComponent = Literal["uq", "w"]
 BoundarySide = Literal["left", "bottom", "top", "right"]
@@ -17,9 +17,9 @@ class MomentumAssembler:
     Uses cell-centered velocity fields and face-centered
     mass fluxes on a structured collocated FVM mesh.
     """
-    def __init__(self, mesh: Mesh, material: Material, boundary_conditions: Optional[BoundaryCondition] = None):
+    def __init__(self, mesh: Mesh, boundary_conditions: Optional[BoundaryCondition] = None):
         self.mesh = mesh
-        self.material = material
+        # self.material = material
         self.bc = boundary_conditions
         self.N = mesh.Nx * mesh.Nz
 
@@ -102,7 +102,10 @@ class MomentumAssembler:
 
         # transposed momentum from u velocity
         dwdx_z = 0.5 * (fields.dwdx[:-1, :] + fields.dwdx[1:, :])
+        
         tau_cross = mu_z * dwdx_z
+
+
 
         diffusion_stress = np.zeros_like(bu)
         diffusion_stress[:-1, :] += tau_cross * self.mesh.dx  # south
@@ -111,12 +114,12 @@ class MomentumAssembler:
         # source momentum from mushy zone
         source_momentum_sink = np.zeros_like(bu)
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.uq_old) * V
-        source_momentum_sink[:] = 0
+        # source_momentum_sink[:] = 0
 
         # # source surface tension from marangoni effect
         surface_tension = np.zeros_like(bu)
         surface_tension[0, :] = self._source_surf_tension(fields.dgamma_dT, fields.dTdx)
-        surface_tension[:] = 0
+        # surface_tension[:] = 0
 
 
         bu += diffusion_stress + source_momentum_sink + surface_tension
@@ -251,6 +254,9 @@ class MomentumAssembler:
     def _source_surf_tension(self, dgamma_dT: np.ndarray, dTdx_all: np.ndarray):
 
         dTdx_topRow = dTdx_all[0, :]
+        dgamma_dT = np.ones_like(dgamma_dT)* (-0.26 * 1e-3)
+
+
 
         return -dgamma_dT * dTdx_topRow * self.mesh.dx
 

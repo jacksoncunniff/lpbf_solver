@@ -62,7 +62,7 @@ class FlowField:
         self.w: np.ndarray = np.zeros(self.two_dim)
         self.p: np.ndarray = np.zeros(self.two_dim)
         self.T: np.ndarray = np.ones(self.two_dim) * 303
-        self.mu: np.ndarray = np.zeros(self.two_dim)
+        self.mu: np.ndarray = np.ones(self.two_dim) * 4 * 1e-3
         self.cp: np.ndarray = Cp_ti(self.T)
         self.k: np.ndarray = (1-0.45)**4 * K_ti(self.T)
         self.rho: np.ndarray = (1-0.45) * density_ti(self.T)

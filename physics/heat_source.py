@@ -28,7 +28,6 @@ class LaserSource:
     k: np.ndarray
     V: float                # speed of laser [m/s]
     t_prime: float          # some kind of ref time?
-    delta_t: float          # time increment since previous update
 
 
     def _laser_module(self, x, y, z, current_time, dt, rho: np.ndarray):
@@ -70,7 +69,9 @@ class LaserSource:
         rho_field = fields.rho
         x = mesh.x[None, :]
         z = mesh.z[:, None]
-        y = mesh.y.max()/2
+        y = (mesh.y.min() + mesh.y.max()) / 2
+        # y = 0
+        # y = mesh.y.max()/2
 
 
         dT_fields = self._laser_module(
@@ -82,5 +83,5 @@ class LaserSource:
                                     rho=rho_field
                                     )
 
-        # print(f"dT_fields: {dT_fields.shape()}")
+        print(f"dT_fields: {dT_fields.max()}")
         return dT_fields

@@ -3,7 +3,6 @@ import numpy as np
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags_array
 
-from core import material
 from core.settings import SolveSettings
 
 from core.mesh import Mesh
@@ -19,7 +18,7 @@ class TemperatureModule:
                  faces: FaceField,
                  mesh: Mesh,
                  dt: float,
-                 material: material.Material
+                #  material: material.Material
                  ):
 
         self.dx = mesh.dx
@@ -33,26 +32,29 @@ class TemperatureModule:
         self.mesh = mesh
         self.faces = faces
         self.dt = dt
-        self.material = material
+        # self.material = material
         self.settings = settings
         self.assembler = EnergyAssembler()
 
     def laser_update(self, current_t):
         laser = LaserSource(
-                P = 250,
-                A = 1,
-                Cp = self.fields.cp,
-                a = 0.1,
-                b = 0.1,
-                c = 0.02,
-                rho=self.fields.rho,
-                k=self.fields.k,
-                V = 1.5,
-                t_prime = 1,
-                delta_t = 1
+                P = 500,                    #[W]
+                A = 0.8,                    #[1]
+                Cp = self.fields.cp,        #[J/kg-K]
+                a = 100*1e-6,               #[m] -> micrometer * 1e-6
+                b = 100*1e-6,               #[m] ""
+                c = 30 * 1e-6,              #[m] ""
+                rho=self.fields.rho,        #[kg/m3]
+                k=self.fields.k,            #[W/m3-K]
+                V = 0.5,                    #[m/s]
+                t_prime = current_t,                #[s]
         )
 
-        dT = laser.temperature_update(self.fields, self.mesh, current_t, self.mesh.dt)
+        dT = laser.temperature_update(
+            fields              = self.fields, 
+            mesh                = self.mesh, 
+            current_time        = current_t, 
+            delta_time          = self.mesh.dt)
         self.fields.T[:] += dT
 
     def solve_energy(self):
@@ -64,6 +66,7 @@ class TemperatureModule:
             self.faces,
             self.mesh.dt
         )
+        # print(aP)
 
         # T = spsolve(A_T, b_T)
         # self.fields.T[:] = T.reshape(shape)
