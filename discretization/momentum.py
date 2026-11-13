@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.ctypeslib import as_array
 from scipy.sparse import coo_array
 
 from core.boundary_conditions import BoundaryCondition
@@ -115,8 +116,15 @@ class MomentumAssembler:
 
 
         bu += diffusion_stress + source_momentum_sink + surface_tension
-        bu = bu.ravel()
 
+        bu_ = bu.copy()
+        aP_ = aP.copy()
+        aE_ = aE.copy()
+        aW_ = aW.copy()
+        aS_ = aS.copy()
+        aN_ = aN.copy()
+
+        bu = bu.ravel()
         aP = aP.ravel()
         aE = aE.ravel()
         aW = aW.ravel()
@@ -126,7 +134,7 @@ class MomentumAssembler:
         Nx = self.mesh.Nx
         Nz = self.mesh.Nz
         Au = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
-        return Au, bu, aP
+        return Au, bu, aP, aE_, aW_, aS_, aN_, aP_, bu_
 
     
 
@@ -220,9 +228,16 @@ class MomentumAssembler:
         source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w) * V
 
         bw += diffusion_stress + source_momentum_sink
-        bw = bw.ravel()
+
+        bw_ = bw.copy()
+        aP_ = aP.copy()
+        aE_ = aE.copy()
+        aW_ = aW.copy()
+        aS_ = aS.copy()
+        aN_ = aN.copy()
 
         # print(f"aS: {aS}")
+        bw = bw.ravel()
         aP = aP.ravel()
         aE = aE.ravel()
         aW = aW.ravel()
@@ -233,9 +248,7 @@ class MomentumAssembler:
         Nz = self.mesh.Nz
 
         Aw = self._build_sparse_matrix(aE, aW, aS, aN, aP, Nx, Nz)
-
-
-        return Aw, bw, aP
+        return Aw, bw, aP, aE_, aW_, aS_, aN_, aP_, bw_
 
     def _source_momentum(self, e_vector, u_vector):
         # source momentum sink from the mushy zone

@@ -1,16 +1,15 @@
-
 import numpy as np
 from scipy.sparse.linalg import spsolve
 from scipy.sparse import diags_array
 
-from core.settings import SolveSettings
-
+from solver.ADI import ADI
 from core.mesh import Mesh
+from core.settings import SolveSettings
 from core.fields import FlowField, FaceField
-from discretization.energy import EnergyAssembler
 from physics.heat_source import LaserSource
-
+from discretization.energy import EnergyAssembler
 class TemperatureModule:
+
 
     def __init__(self, 
                  settings: SolveSettings, 
@@ -18,7 +17,6 @@ class TemperatureModule:
                  faces: FaceField,
                  mesh: Mesh,
                  dt: float,
-                #  material: material.Material
                  ):
 
         self.dx = mesh.dx
@@ -32,14 +30,13 @@ class TemperatureModule:
         self.mesh = mesh
         self.faces = faces
         self.dt = dt
-        # self.material = material
         self.settings = settings
         self.assembler = EnergyAssembler()
 
     def laser_update(self, current_t):
         
         laser = LaserSource(
-                P = 500,                    #[W]
+                P = 150,                    #[W]
                 A = 0.8,                    #[1]
                 Cp = self.fields.cp,        #[J/kg-K]
                 a = 100*1e-6,               #[m] -> micrometer * 1e-6
@@ -71,8 +68,8 @@ class TemperatureModule:
         # T = spsolve(A_T, b_T.ravel().copy())
         # self.fields.T[:] = T.reshape(shape)
 
-        self.fields.T[:] = self._ADI(aP, aE, aW, aN, aS, a0, b_T)
-
+        # self.fields.T[:] = self._ADI(aP, aE, aW, aN, aS, a0, b_T)
+        self.fields.T[:] = ADI(aP, aE, aW, aN, aS, b_T, field_of_interest=self.fields.T, Nx=shape[1], Nz=shape[0])
 
     def _ADI(self, aP, aE, aW, aN, aS, a0, rhs: np.ndarray) -> np.ndarray:
         """Implementation of alternating-direction implicit method that will sweep row by row across the computational
@@ -186,7 +183,7 @@ class TemperatureModule:
         T = self.fields.T
 
         if not np.isfinite(T).all():
-            raise FloatingPointError("Cannot compute depth from invalid Temperaeture Field")
+            raise FloatingPointError("Cannot compute depth from invalid Te Field")
 
         molten = T > 1878.0
         rows = np.flatnonzero(np.any(molten, axis=1))

@@ -85,11 +85,11 @@ class EnergyAssembler:
         b_T[:, 0]   += Dw[:, 0]  * 300
         b_T[-1, :]  += Ds[-1, :]  * 300
 
-        h = 5 # UPDATE THIS LATER TODO
+        h = 25 # UPDATE THIS LATER TODO
         # R_eff is Dn but with conductive and convection between cell and to ambient condition = 300K
         R_eff = np.zeros_like(b_T)
         R_eff[0, :] = dx / (1.0/h + (dz/2)/fields.k[0, :])
-        b_T[0, :]   = R_eff[0, :] * 300 # convection heat loss
+        b_T[0, :]   += R_eff[0, :] * 300 # convection heat loss
 
         # Grid Peclet Numbers
         # Pe = Fe / De

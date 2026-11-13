@@ -4,12 +4,15 @@ from scipy.sparse.linalg import spsolve
 from core.settings import SolveSettings
 
 from core.mesh import Mesh
+from solver.ADI import ADI
 from core.fields import FlowField, FaceField
 from core.boundary_conditions import BoundaryCondition
 
 from discretization.momentum import MomentumAssembler
 from discretization.pressure import assemble_pressure_corrector, face_velocity_interpolation, scalar_pressure_gradient
 
+from typing import Literal, Optional
+RunModes = Literal["ADI", "SPSOLVE"]
 
 class SIMPLEcfd:
     """
@@ -25,7 +28,8 @@ class SIMPLEcfd:
                  fields: FlowField,
                  faces: FaceField,
                  mesh: Mesh,
-                 dt: float
+                 dt: float,
+                 mode: Optional[RunModes] = "SPSOLVE"
                  ):
 
         self.dx = mesh.dx
@@ -34,12 +38,11 @@ class SIMPLEcfd:
         self.Nx = mesh.Nx
         self.Nz = mesh.Nz
         self.N = self.Nx * self.Nz
-
+        self.mode = mode
         self.fields = fields
         self.mesh = mesh
         self.faces = faces
         self.dt = dt
-        # self.material = material
         self.settings = settings
         self.assembler = MomentumAssembler(self.mesh)
 
@@ -61,21 +64,45 @@ class SIMPLEcfd:
 
     def _solve_momentum(self):
         shape = (self.Nz, self.Nx)
-        Au, bu, aPu = self.assembler.assemble_u(self.fields, self.faces, self.dt)
-        Aw, bw, aPw = self.assembler.assemble_w(self.fields, self.faces, self.dt)
+        Au, bu, aPu, aE_u, aW_u, aS_u, aN_u, aPu_, bu_ = self.assembler.assemble_u(self.fields, self.faces, self.dt)
+        Aw, bw, aPw, aE_w, aW_w, aS_w, aN_w, aPw_, bw_ = self.assembler.assemble_w(self.fields, self.faces, self.dt)
 
-        # self._check_system("uq-star", Au, bu)
-        # self._check_system("w-star", Aw, bw)
+        if self.mode == "SPSOLVE":
+            # self._check_system("uq-star", Au, bu)
+            # self._check_system("w-star", Aw, bw)
+            uq_star = spsolve(Au, bu)
+            w_star = spsolve(Aw, bw)
+            self.fields.uq_star[:] = uq_star.reshape(shape)
+            self.fields.w_star[:] = w_star.reshape(shape)
 
-        uq_star = spsolve(Au, bu)
-        w_star = spsolve(Aw, bw)
+        else:
+            uq_star = ADI(aP = aPu_, 
+                aE = aE_u, 
+                aW = aW_u,
+                aS = aS_u,
+                aN = aN_u,
+                rhs = bu_,
+                field_of_interest=self.fields.uq,
+                Nx = self.mesh.Nx,
+                Nz = self.mesh.Nz
+                )
+
+            w_star = ADI(aP = aPw_, 
+                        aE = aE_w, 
+                        aW = aW_w,
+                        aS = aS_w,
+                        aN = aN_w,
+                        rhs = bw_,
+                        field_of_interest=self.fields.w,
+                        Nx = self.mesh.Nx,
+                        Nz = self.mesh.Nz
+                        )
+
+            self.fields.uq_star[:] = uq_star
+            self.fields.w_star[:] = w_star
 
         # residual_q = bu - Au @ uq_star
         # residual_w = bw - Aw @ w_star
-
-        self.fields.uq_star[:] = uq_star.reshape(shape)
-        self.fields.w_star[:] = w_star.reshape(shape)
-
         # return aPu, aPw, residual_q, residual_w
         return aPu, aPw
 
@@ -95,7 +122,6 @@ class SIMPLEcfd:
         )
         f.dwdx[:] = dwdx
 
-
     def _solve_pressure_correction(self, Cp, Cw):
         """Routine to solve pressure corrections after finding rhie chow face velocities
 
@@ -103,7 +129,7 @@ class SIMPLEcfd:
             _type_: _description_
         """
 
-        Ap, bp, Cq_full, Cw_full = assemble_pressure_corrector(
+        Ap, bp, Cq_full, Cw_full, aP_pressure, aE_pressure, aW_pressure, aN_pressure, aS_pressure, bp = assemble_pressure_corrector(
             self.mesh,
             self.faces.flux_q_star,
             self.faces.flux_w_star,
@@ -119,11 +145,18 @@ class SIMPLEcfd:
         Ap[k, k] = 1
         bp.ravel()[k] = 0
         Ap = Ap.tocsr(copy=True)
-        
-        pprime_flat = spsolve(Ap, bp.ravel())
-        pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))
 
-        # numerical_residual = bp - Ap @ pprime_flat
+        if self.mode == "SPSOLVE":
+            pprime_flat = spsolve(Ap, bp.ravel())
+            pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))
+            # numerical_residual = bp - Ap @ pprime_flat
+        else:
+            pprime = ADI(aP_pressure, aE_pressure, aW_pressure, aN_pressure, aS_pressure, bp, field_of_interest=np.zeros_like(self.fields.p), Nx = self.mesh.Nx, Nz = self.mesh.Nz)
+            # pprime_flat = spsolve(Ap, bp.ravel())
+            # pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))
+            
+            # pprime = pprime_flat.reshape((self.mesh.Nz, self.mesh.Nx))            
+
 
         return pprime, Cq_full, Cw_full
 
@@ -154,7 +187,6 @@ class SIMPLEcfd:
 
         self.fields.uq[:] = self.fields.uq_star - du * dPp_dx
         self.fields.w[:] = self.fields.w_star - dw * dPp_dz
-
 
     def _correct_pressure(self, relaxation_factor, pprime):
         
@@ -212,8 +244,8 @@ class SIMPLEcfd:
     def _momentum_residual(self):
         shape = (self.mesh.Nz, self.mesh.Nx)
 
-        Au, bu, _ = self.assembler.assemble_u(self.fields, self.faces, self.dt)
-        Aw, bw, _ = self.assembler.assemble_w(self.fields, self.faces, self.dt)
+        Au, bu, aPu, aE_u, aW_u, aS_u, aN_u, aPu_, bu_ = self.assembler.assemble_u(self.fields, self.faces, self.dt)
+        Aw, bw, aPw, aE_w, aW_w, aS_w, aN_w, aPw_, bw_ = self.assembler.assemble_w(self.fields, self.faces, self.dt)
 
         Ru = (
             np.asarray(bu).ravel()
@@ -226,8 +258,6 @@ class SIMPLEcfd:
         ).reshape(shape)
 
         return Ru, Rw
-
-
 
     def run(self, maxIters):
         """Executes SIMPLE loop at one time step

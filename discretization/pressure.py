@@ -63,8 +63,10 @@ def assemble_pressure_corrector(
     Cq,
     Cw,
 ):
+    Nz = mesh.Nz
+    Nx = mesh.Nx
 
-
+    # k = (Nz-1)*Nx + 1
     Cq_full = np.zeros((mesh.Nz, mesh.Nx+1))
     Cw_full = np.zeros((mesh.Nz+1, mesh.Nx))
 
@@ -91,7 +93,14 @@ def assemble_pressure_corrector(
     bp = -mass_imbalance
     App = aP_pressure.copy()
 
-    return Ap, bp, Cq_full, Cw_full
+    # Fixed point pressure solve method for ADI solve
+    aP_pressure[Nz-1, 1] = 1
+    aE_pressure[Nz-1, 1] = 0
+    aW_pressure[Nz-1, 1] = 0 
+    aN_pressure[Nz-1, 1] = 0
+    aS_pressure[Nz-1, 1] = 0
+
+    return Ap, bp, Cq_full, Cw_full, aP_pressure, aE_pressure, aW_pressure, aN_pressure, aS_pressure, bp
 
 
 def scalar_pressure_gradient(pressure_field, dx, dz):
