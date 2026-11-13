@@ -47,7 +47,7 @@ class TemperatureModule:
                 c = 30 * 1e-6,              #[m] ""
                 rho=self.fields.rho,        #[kg/m3]
                 k=self.fields.k,            #[W/m3-K]
-                V = 0.5,                    #[m/s]
+                V = 1,                    #[m/s]
                 t_prime = current_t,                #[s]
         )
 
@@ -59,7 +59,6 @@ class TemperatureModule:
         self.fields.T[:] += dT
 
     def solve_energy(self):
-
         shape = (self.Nz, self.Nx)
         A_T, b_T, aP_T, aP, aE, aW, aN, aS, a0 = self.assembler.assemble_temperature(
             self.mesh,
@@ -69,10 +68,10 @@ class TemperatureModule:
         )
         # print(aP)
 
-        # T = spsolve(A_T, b_T)
+        # T = spsolve(A_T, b_T.ravel().copy())
         # self.fields.T[:] = T.reshape(shape)
 
-        self._ADI(aP, aE, aW, aN, aS, a0, b_T)
+        self.fields.T[:] = self._ADI(aP, aE, aW, aN, aS, a0, b_T)
 
 
     def _ADI(self, aP, aE, aW, aN, aS, a0, rhs: np.ndarray) -> np.ndarray:
@@ -136,7 +135,7 @@ class TemperatureModule:
             b = aP[:, i].copy()
             c = -aS[:, i].copy()
             d = rhs[:, i].copy() + aW_rhs + aE_rhs
-            T[j, :] = self._TDMA(a, b, c, d)
+            T[:, i] = self._TDMA(a, b, c, d)
 
 
         residual = rhs.copy() - aP * T
@@ -186,9 +185,13 @@ class TemperatureModule:
     def compute_depth(self):
         T = self.fields.T
 
-        T_bool = ~np.isclose(T, 300, atol=0.1)
-        T_row = np.any(T_bool, axis=1)
-        T_true_row = np.flatnonzero(T_row)
-        T_row_deepest = int(T_true_row[-1])
+        if not np.isfinite(T).all():
+            raise FloatingPointError("Cannot compute depth from invalid Temperaeture Field")
 
-        return T_row_deepest
+        molten = T > 1878.0
+        rows = np.flatnonzero(np.any(molten, axis=1))
+
+        if rows.size == 0:
+            return 0.0
+
+        return float(self.mesh.z[rows[-1]])

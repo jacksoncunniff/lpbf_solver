@@ -54,7 +54,8 @@ class LaserSource:
         c = self.c
 
         X1 = (3*np.sqrt(3.0)*P*A)/(rho * C*np.pi*np.sqrt(np.pi))
-        X2 = np.exp(-3*((x-V*current_time - 0.1e-3)**2/(12*alpha*dt+a**2) + y**2/(12*alpha*dt+b**2) + z**2/(12*alpha*dt+c**2))) 
+        # X2 = np.exp(-3*((x-V*current_time - 0.1e-3)**2/(12*alpha*dt+a**2) + y**2/(12*alpha*dt+b**2) + z**2/(12*alpha*dt+c**2))) 
+        X2 = np.exp(-3*((x-V*current_time)**2/(12*alpha*dt+a**2) + y**2/(12*alpha*dt+b**2) + z**2/(12*alpha*dt+c**2))) 
         X3 = np.sqrt(12*alpha*dt + a**2) * np.sqrt(12*alpha*dt + b**2) * np.sqrt(12*alpha*dt + c**2)
 
         return X1*X2/X3*dt
@@ -69,9 +70,7 @@ class LaserSource:
         rho_field = fields.rho
         x = mesh.x[None, :]
         z = mesh.z[:, None]
-        y = (mesh.y.min() + mesh.y.max()) / 2
-        # y = 0
-        # y = mesh.y.max()/2
+        y = 0
 
 
         dT_fields = self._laser_module(
@@ -83,5 +82,5 @@ class LaserSource:
                                     rho=rho_field,
                                     )
 
-        print(f"dT_fields: {dT_fields.max()}")
+        # print(f"dT_fields: {dT_fields.max()}")
         return dT_fields

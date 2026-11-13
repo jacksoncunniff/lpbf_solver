@@ -217,7 +217,7 @@ class MomentumAssembler:
         # source momentum from mushy zone
         source_momentum_sink = np.zeros_like(bw)
         fields.calculate_liquid_frac()
-        source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w)
+        source_momentum_sink = self._source_momentum(fields.liquid_frac, fields.w) * V
 
         bw += diffusion_stress + source_momentum_sink
         bw = bw.ravel()

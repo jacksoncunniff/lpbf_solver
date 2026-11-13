@@ -22,22 +22,21 @@ def setup():
     parser.add_argument("--nx", type=int, default=100)
     parser.add_argument("--nz", type=int, default=50)
     parser.add_argument("--dt", type=float, default=1e-6)
-    parser.add_argument("--steps", type=int, default=1000)
+    parser.add_argument("--steps", type=int, default=10)
 
     args = parser.parse_args()
     x = 0.9*1e-3# in [m]
     y = 0.5*1e-3
     z = 0.5*1e-3
+    steps = args.steps
     mesh: Mesh = Mesh(x, y, z, args.nx, 1, args.nz, args.dt)
     # material = Material()
     solverSettings = SolveSettings(0.25, 50)
     plotSettings = PlotSettings()
 
-    return solverSettings, plotSettings, mesh
-    # take args and throw them into the solver settings, mesh, etc.
+    return solverSettings, plotSettings, mesh, steps
 
-
-def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
+def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh, steps: int):
     Nq = mesh.Nx
     Nz = mesh.Nz
     fields = FlowField(mesh, Nq, Nz)            # initialize fields
@@ -49,9 +48,9 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
     steady_state = False
     depth = -1
     i = 0
-    n = 100
+    n = steps
     while not steady_state:
-        print(f"Entered main loop, t = {t}")
+        print(f"Step: {i+1}\nTime: {t}\n")
 
         fields.update_material_properties()
         energy.laser_update(current_t = t)        
@@ -63,7 +62,7 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
         energy.solve_energy()
 
         depthNew = energy.compute_depth()
-        # print(depthNew)
+        print(depthNew)
         t += mesh.dt
 
         # if depthNew == depth:
@@ -71,8 +70,8 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
         # else:
         #     depth = depthNew
         
-        if i > n: steady_state = True
         i += 1
+        if i > n: steady_state = True
 
     return fields
 
@@ -80,12 +79,13 @@ def main(solveSettings: SolveSettings, plotSettings: PlotSettings, mesh: Mesh):
 if __name__ == "__main__":
     
     
-    solverSettings, plotSettings, mesh = setup()
+    solverSettings, plotSettings, mesh, steps = setup()
 
     F = main(
         solveSettings= solverSettings,
         plotSettings= plotSettings,
         mesh = mesh,
-        # material = material
+        steps=steps
     )
-    plot_temperature(F)
+    fig, ax = plot_temperature(F)
+    plt.show()

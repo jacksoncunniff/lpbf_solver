@@ -175,7 +175,8 @@ class FlowField:
     def update_material_properties(self):
         mask = self.T > 303
         T = self.T.copy()[mask]
-        self.mu[mask] = density_ti(T)
+        self.mu[mask] = mu_ti(T)
+        self.rho[mask] = density_ti(T)
         self.cp[mask] = Cp_ti(T)
         self.k[mask] = K_ti(T)
 

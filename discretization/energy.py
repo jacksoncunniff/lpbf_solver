@@ -14,8 +14,9 @@ class EnergyAssembler:
         pass
 
 
-    def assemble_temperature(self, mesh: Mesh, fields: FlowField, faces: FaceField, dt): 
 
+    def assemble_temperature(self, mesh: Mesh, fields: FlowField, faces: FaceField, dt): 
+        
         lid_case = True
         shape = mesh.Nz, mesh.Nx
         dz = mesh.dz
@@ -67,7 +68,7 @@ class EnergyAssembler:
         Fe = cp_e * faces.flux_q[:, 1:]
         Fw = cp_w * faces.flux_q[:, :-1]
         Fs = cp_s * faces.flux_w[1:, :]
-        Fn = cp_n * faces.flux_w[1:, :]
+        Fn = cp_n * faces.flux_w[:-1, :] 
 
         # Calculate intermediate values
         De[:, :-1]  = k_q * dz / dx
@@ -80,9 +81,9 @@ class EnergyAssembler:
         Dw[:, 0]   = 2 * k_q[:, 0]  * dz / dx
         Ds[-1, :]  = 2 * k_z[-1, :] * dx / dz
 
-        b_T[:, -1]  = De[:, -1] * 300
-        b_T[:, 0]   = Dw[:, 0]  * 300
-        b_T[-1, :]  = Ds[0, :]  * 300
+        b_T[:, -1]  += De[:, -1] * 300
+        b_T[:, 0]   += Dw[:, 0]  * 300
+        b_T[-1, :]  += Ds[-1, :]  * 300
 
         h = 5 # UPDATE THIS LATER TODO
         # R_eff is Dn but with conductive and convection between cell and to ambient condition = 300K
@@ -102,9 +103,9 @@ class EnergyAssembler:
             return 1
 
         aE = De * scheme() + np.maximum(-Fe, 0)
-        aW = Dw * scheme() + np.maximum(-Fw, 0)
+        aW = Dw * scheme() + np.maximum(Fw, 0)
         aS = Ds * scheme() + np.maximum(-Fs, 0)
-        aN = Dn * scheme() + np.maximum(-Fn, 0)
+        aN = Dn * scheme() + np.maximum(Fn, 0)
         a0 = fields.rho * fields.cp * (dx * dz) / dt
         aP_T: np.ndarray = aE + aW + aN + aS + (Fe - Fw + Fs - Fn) + a0 + R_eff
 

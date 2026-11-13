@@ -238,7 +238,6 @@ class SIMPLEcfd:
 
             self._refresh_gradients()
             aPu, aPw = self._solve_momentum()
-            
             uface, wface, Cq, Cw = face_velocity_interpolation(
                 self.fields,
                 self.faces,
@@ -247,10 +246,9 @@ class SIMPLEcfd:
                 aPw
             )
 
-            # self.faces.flux_q_star
-
             pprime, Cq_full, Cw_full = self._solve_pressure_correction(Cq, Cw)
             self._correct_fluxes(pprime, Cq_full, Cw_full)
+
             self._correct_cell_velocity(aPu, aPw, pprime)
             self._correct_pressure(self.settings.relaxation_factor, pprime)
             self._refresh_gradients()
@@ -260,7 +258,3 @@ class SIMPLEcfd:
             if iteration > maxIters:
                 break
 
-
-
-
-        
